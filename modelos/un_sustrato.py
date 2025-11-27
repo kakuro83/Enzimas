@@ -20,8 +20,7 @@ def hill(S, Vmax, Kd, n):
 
 def adair_simple(S, Vmax, K1, K2):
     r"""
-    Y = \frac{K_1 S + 2 K_1 K_2 S^2}{1 + K_1 S + K_1 K_2 S^2}
-    V = V_{\max}\, Y
+    V = V_{\max}\, \frac{K_1 S + 2 K_1 K_2 S^2}{1 + K_1 S + K_1 K_2 S^2}
     """
     num = K1*S + 2*K1*K2*(S**2)
     den = 1 + K1*S + K1*K2*(S**2)
