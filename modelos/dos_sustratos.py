@@ -1,14 +1,8 @@
 import numpy as np
 
 def ping_pong_bi_bi(X, Vmax, Km_A, Km_B):
-    """
-    Mecanismo Ping-Pong Bi-Bi (común en transesterificación de lipasas).
-    X: Lista o array conteniendo [S_A, S_B]
-       S_A: Primer sustrato (ej. éster/triglicérido)
-       S_B: Segundo sustrato (ej. alcohol)
-    Vmax: Velocidad máxima
-    Km_A: Constante de Michaelis para A
-    Km_B: Constante de Michaelis para B
+    r"""
+    v = \frac{V_{\max}\, A\, B}{K_A B + K_B A}
     """
     S_A, S_B = X # Desempaquetar
     
