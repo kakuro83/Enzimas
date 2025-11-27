@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
 from io import BytesIO
-import inspect # Necesario para leer funciones dinámicamente
+import inspect
 
-# --- IMPORTACIÓN DE MÓDULOS COMPLETOS ---
+# --- IMPORTACIÓN DE MÓDULOS ---
 try:
     import modelos.un_sustrato as mod_un_sustrato
     import modelos.mezcla_sustratos as mod_mezcla
@@ -16,7 +16,6 @@ except ImportError as e:
     st.error(f"Error importando módulos: {e}. Verifica la carpeta 'modelos'.")
     st.stop()
 
-# --- FUNCIÓN AUXILIAR PARA CARGA DINÁMICA ---
 def get_models_from_module(module):
     models = {}
     for name, func in inspect.getmembers(module, inspect.isfunction):
@@ -25,9 +24,13 @@ def get_models_from_module(module):
             models[display_name] = func
     return models
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Ajuste de Cinética Enzimática", layout="centered")
 st.title("Ajuste de Modelos Enzimáticos")
+
+# Inicializar estado para guardar resultados y evitar reinicios al descargar
+if 'resultados' not in st.session_state:
+    st.session_state.resultados = None
 
 # --- 1. SELECCIÓN DE MODALIDAD ---
 modalidad = st.selectbox(
@@ -39,7 +42,7 @@ modalidad = st.selectbox(
     ]
 )
 
-# --- 2. CONFIGURACIÓN DE COLUMNAS Y DATOS ---
+# --- 2. DATOS ---
 st.subheader("Ingreso de Datos Experimentales")
 st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V).")
 
@@ -56,18 +59,13 @@ else:
         col_s1_name = st.text_input("Nombre Sustrato 1:", value="Sustrato 1")
     with c2:
         col_s2_name = st.text_input("Nombre Sustrato 2:", value="Sustrato 2")
-    
     cols = ["Velocidad", col_s1_name, col_s2_name]
-    data_template = {
-        "Velocidad": [None]*5,
-        col_s1_name: [None]*5,
-        col_s2_name: [None]*5
-    }
+    data_template = {"Velocidad": [None]*5, col_s1_name: [None]*5, col_s2_name: [None]*5}
 
 df_input = pd.DataFrame(data_template)
 df_edited = st.data_editor(df_input, num_rows="dynamic", use_container_width=True)
 
-# Limpieza de datos
+# Limpieza
 df = df_edited.dropna(how='all').copy()
 df = df.dropna(subset=["Velocidad"])
 for col in cols:
@@ -75,7 +73,7 @@ for col in cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
 df = df.dropna()
 
-# --- 3. SELECCIÓN DE MODELO Y PARÁMETROS ---
+# --- 3. MODELO Y PARÁMETROS ---
 st.divider()
 st.subheader("Configuración del Ajuste")
 
@@ -87,163 +85,205 @@ elif modalidad == "Diferentes fuentes de un sustrato (Mezcla)":
 else:
     model_options = get_models_from_module(mod_dos)
 
-if not model_options:
-    st.warning("No se encontraron modelos en el archivo seleccionado.")
-    st.stop()
-
 nombre_modelo = st.selectbox("Seleccione el modelo cinético:", list(model_options.keys()))
 funcion_modelo = model_options[nombre_modelo]
 
-# --- DETECCIÓN DE PARÁMETROS ---
-# Inspeccionamos la función ANTES de ejecutar para poder mostrar los inputs manuales
+# Detección de parámetros
 sig = inspect.signature(funcion_modelo)
-param_names = list(sig.parameters.keys())[1:] # Omitimos el primer argumento (S o X)
+param_names = list(sig.parameters.keys())[1:] 
 
-# Sección de Valores Iniciales Manuales
-st.markdown("##### Valores Iniciales de la Regresión")
-use_manual_p0 = st.checkbox("Definir valores iniciales manualmente (Recomendado para parámetros a, b, c)")
+# --- CONFIGURACIÓN DE PARÁMETROS (Manual/Fijo) ---
+st.markdown("##### Parámetros y Valores Iniciales")
+st.caption("Ajusta los valores iniciales. Marca **'Fijar'** si quieres que un parámetro (ej. exponente 'n') se mantenga constante y no sea modificado por el ajuste.")
 
-manual_p0_values = {}
-if use_manual_p0:
-    st.caption("Ingresa una estimación inicial para ayudar al algoritmo:")
-    cols_p = st.columns(len(param_names))
-    for i, p in enumerate(param_names):
-        # Creamos un input para cada parámetro detectado
-        manual_p0_values[p] = cols_p[i].number_input(f"Inicial para {p}", value=1.0)
+# Diccionario para guardar configuración del usuario
+param_settings = {}
+v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
 
-# Inputs para unidades gráficas
-st.markdown("##### Estética de la Gráfica")
+for p in param_names:
+    col_lbl, col_val, col_fix = st.columns([1, 2, 1])
+    
+    # Heurística simple para valor por defecto
+    default_val = 1.0
+    if "Vmax" in p: default_val = float(v_max_guess)
+    elif "n" in p: default_val = 1.0
+    elif not df.empty and ("Km" in p or "K_" in p): 
+        default_val = float(np.mean(df.iloc[:, 1]))
+    
+    with col_lbl:
+        st.markdown(f"**{p}**")
+    with col_val:
+        # Usamos claves únicas para evitar conflictos al cambiar de modelo
+        val = st.number_input(f"Valor {p}", value=default_val, key=f"val_{p}_{nombre_modelo}")
+    with col_fix:
+        fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
+    
+    param_settings[p] = {"value": val, "fixed": fixed}
+
+# Estética Gráfica
+st.markdown("##### Estética")
 c_units1, c_units2 = st.columns(2)
 with c_units1:
-    unidad_v = st.text_input("Unidades de Velocidad (Eje Y):", value="mM/min")
+    unidad_v = st.text_input("Unidades Velocidad:", value="mM/min")
 with c_units2:
-    unidad_s = st.text_input("Unidades de Sustrato (Eje X):", value="mM")
+    unidad_s = st.text_input("Unidades Sustrato:", value="mM")
 
-# --- 4. LÓGICA DE EJECUCIÓN ---
+# --- 4. EJECUCIÓN ---
 if st.button("Ejecutar ajuste de datos", type="primary"):
     if df.empty or len(df) < 3:
         st.error("Por favor ingresa al menos 3 puntos de datos válidos.")
     else:
         try:
-            # Preparación de datos Y
+            # Preparar datos
             y_data = df["Velocidad"].values
-            
-            # Preparación de datos X
-            v_max_guess = np.max(y_data)
-            
             if modalidad == "Un solo sustrato":
                 x_data = df[col_s1_name].values
-                km_guess = np.mean(x_data)
             else:
-                s1_data = df[col_s1_name].values
-                s2_data = df[col_s2_name].values
-                x_data = [s1_data, s2_data]
-                km_guess = np.mean(s1_data)
-                km_guess_2 = np.mean(s2_data)
+                x_data = [df[col_s1_name].values, df[col_s2_name].values]
 
-            # --- DEFINICIÓN DE VALORES INICIALES (p0) ---
+            # Separar parámetros libres y fijos
+            free_params_keys = []
             p0 = []
-            bounds_lower = []
-            bounds_upper = []
+            fixed_params_map = {}
 
             for p in param_names:
-                bounds_lower.append(0)
-                bounds_upper.append(np.inf)
-                
-                if use_manual_p0:
-                    # Usar el valor que el usuario escribió en la cajita
-                    p0.append(manual_p0_values[p])
+                setting = param_settings[p]
+                if setting["fixed"]:
+                    fixed_params_map[p] = setting["value"]
                 else:
-                    # Lógica Heurística (Automática)
-                    if "Vmax" in p or "V_max" in p:
-                        p0.append(v_max_guess)
-                    elif "Km" in p or "K_" in p or "K05" in p:
-                        if "2" in p or "B" in p: 
-                             p0.append(np.mean(df[cols[2]].values) if len(cols)>2 else km_guess)
-                        else:
-                            p0.append(km_guess)
-                    elif "n" == p:
-                        p0.append(1.0)
-                    elif "beta" in p:
-                        p0.append(1.0)
-                    elif "Ki" in p:
-                        p0.append(np.max(df[cols[1]].values))
-                    else:
-                        # Si se llama 'a', 'b', 'c', entra aquí
-                        p0.append(1.0)
+                    free_params_keys.append(p)
+                    p0.append(setting["value"])
 
-            # --- AJUSTE DE CURVA ---
-            popt, pcov = curve_fit(
-                funcion_modelo, 
-                x_data, 
-                y_data, 
-                p0=p0, 
-                bounds=(bounds_lower, bounds_upper), 
-                maxfev=10000
-            )
-            
-            # --- CÁLCULO DE R2 ---
-            y_pred = funcion_modelo(x_data, *popt)
+            # Definir función wrapper para curve_fit que maneje fijos
+            def model_wrapper(x, *free_args):
+                # Reconstruir lista completa de argumentos para la función original
+                full_args = []
+                free_idx = 0
+                for name in param_names:
+                    if name in fixed_params_map:
+                        full_args.append(fixed_params_map[name])
+                    else:
+                        full_args.append(free_args[free_idx])
+                        free_idx += 1
+                return funcion_modelo(x, *full_args)
+
+            # Optimización
+            if not free_params_keys:
+                # Caso raro: Todos los parámetros están fijos
+                popt_free = []
+                popt_full = [param_settings[p]["value"] for p in param_names]
+                st.info("Todos los parámetros están fijos. Se calcula solo R².")
+            else:
+                popt_free, pcov = curve_fit(
+                    model_wrapper, 
+                    x_data, 
+                    y_data, 
+                    p0=p0, 
+                    maxfev=10000,
+                    bounds=(0, np.inf) # Asumiendo positivos
+                )
+                
+                # Reconstruir parámetros completos para mostrar
+                popt_full = []
+                free_idx = 0
+                for p in param_names:
+                    if param_settings[p]["fixed"]:
+                        popt_full.append(param_settings[p]["value"])
+                    else:
+                        popt_full.append(popt_free[free_idx])
+                        free_idx += 1
+
+            # Calcular R2
+            y_pred = funcion_modelo(x_data, *popt_full)
             r2 = r2_score(y_data, y_pred)
 
-            # --- RESULTADOS ---
-            st.success(f"¡Ajuste exitoso usando {nombre_modelo}!")
+            # GUARDAR EN SESSION STATE
+            st.session_state.resultados = {
+                "popt": popt_full,
+                "r2": r2,
+                "param_names": param_names,
+                "x_data": x_data,
+                "y_data": y_data,
+                "s1_col": col_s1_name,
+                "s2_col": col_s2_name if len(cols) > 2 else None,
+                "s1_vals": df[col_s1_name].values,
+                "s2_vals": df[col_s2_name].values if len(cols) > 2 else None
+            }
             
-            col_res1, col_res2 = st.columns([1, 2])
-            
-            with col_res1:
-                st.markdown("### Parámetros")
-                results_df = pd.DataFrame({
-                    "Parámetro": param_names,
-                    "Valor": popt
-                })
-                st.dataframe(results_df, hide_index=True)
-                st.metric("R²", f"{r2:.4f}")
-                
-                csv = results_df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Descargar Tabla CSV", csv, "constantes.csv", "text/csv")
-
-            with col_res2:
-                # --- GRÁFICA ---
-                fig, ax = plt.subplots()
-                label_y = f"Velocidad ({unidad_v})"
-                label_x = ""
-
-                if modalidad == "Un solo sustrato":
-                    ax.scatter(x_data, y_data, color='blue', label='Experimental', zorder=2)
-                    x_smooth = np.linspace(min(x_data), max(x_data), 100)
-                    y_smooth = funcion_modelo(x_smooth, *popt)
-                    ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
-                    label_x = f"{col_s1_name} ({unidad_s})"
-                    
-                else:
-                    axis_choice = st.radio("Eje X para gráfica:", [col_s1_name, col_s2_name], horizontal=True)
-                    if axis_choice == col_s1_name:
-                        x_plot = s1_data
-                        x_model_input = [np.linspace(min(s1_data), max(s1_data), 100), np.full(100, np.mean(s2_data))]
-                        label_x = f"{col_s1_name} ({unidad_s})"
-                        subtitle = f"(A {col_s2_name} cte = {np.mean(s2_data):.2f})"
-                    else:
-                        x_plot = s2_data
-                        x_model_input = [np.full(100, np.mean(s1_data)), np.linspace(min(s2_data), max(s2_data), 100)]
-                        label_x = f"{col_s2_name} ({unidad_s})"
-                        subtitle = f"(A {col_s1_name} cte = {np.mean(s1_data):.2f})"
-
-                    ax.scatter(x_plot, y_data, color='blue', label='Experimental')
-                    y_smooth = funcion_modelo(x_model_input, *popt)
-                    ax.plot(x_model_input[0] if axis_choice==col_s1_name else x_model_input[1], y_smooth, color='red', label='Modelo')
-                    ax.set_title(subtitle, fontsize=9)
-
-                ax.set_xlabel(label_x)
-                ax.set_ylabel(label_y)
-                ax.legend()
-                ax.grid(True, linestyle='--', alpha=0.5)
-                st.pyplot(fig)
-                
-                buf = BytesIO()
-                fig.savefig(buf, format="png", dpi=300)
-                st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
+            st.rerun() # Recargar para mostrar resultados desde el bloque persistente
 
         except Exception as e:
             st.error(f"Error en el cálculo: {e}")
-            st.warning("Verifica tus datos o intenta usar valores iniciales manuales.")
+
+# --- 5. MOSTRAR RESULTADOS (PERSISTENTE) ---
+if st.session_state.resultados:
+    res = st.session_state.resultados
+    st.success("¡Resultados disponibles!")
+    
+    col_res1, col_res2 = st.columns([1, 2])
+    
+    with col_res1:
+        st.markdown("### Parámetros")
+        results_df = pd.DataFrame({
+            "Parámetro": res["param_names"],
+            "Valor": res["popt"]
+        })
+        st.dataframe(results_df, hide_index=True)
+        st.metric("R²", f"{res['r2']:.4f}")
+        
+        csv = results_df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Descargar Tabla CSV", csv, "constantes.csv", "text/csv")
+
+    with col_res2:
+        fig, ax = plt.subplots()
+        label_y = f"Velocidad ({unidad_v})"
+        
+        # Lógica de graficado usando los datos guardados
+        if modalidad == "Un solo sustrato":
+            x_vals = res["x_data"]
+            ax.scatter(x_vals, res["y_data"], color='blue', label='Experimental', zorder=2)
+            
+            x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+            y_smooth = funcion_modelo(x_smooth, *res["popt"])
+            ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
+            ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+            
+        else:
+            # Graficado Multisustrato
+            axis_choice = st.radio("Eje X para gráfica:", [res["s1_col"], res["s2_col"]], horizontal=True)
+            s1_vals = res["s1_vals"]
+            s2_vals = res["s2_vals"]
+            
+            if axis_choice == res["s1_col"]:
+                x_plot = s1_vals
+                x_smooth = np.linspace(min(s1_vals), max(s1_vals), 100)
+                # Proyección: S2 constante en promedio
+                x_fixed = np.full(100, np.mean(s2_vals))
+                x_model_input = [x_smooth, x_fixed]
+                
+                label_x = f"{res['s1_col']} ({unidad_s})"
+                subtitle = f"(A {res['s2_col']} cte = {np.mean(s2_vals):.2f})"
+            else:
+                x_plot = s2_vals
+                x_smooth = np.linspace(min(s2_vals), max(s2_vals), 100)
+                # Proyección: S1 constante en promedio
+                x_fixed = np.full(100, np.mean(s1_vals))
+                x_model_input = [x_fixed, x_smooth]
+                
+                label_x = f"{res['s2_col']} ({unidad_s})"
+                subtitle = f"(A {res['s1_col']} cte = {np.mean(s1_vals):.2f})"
+
+            ax.scatter(x_plot, res["y_data"], color='blue', label='Experimental')
+            y_smooth = funcion_modelo(x_model_input, *res["popt"])
+            ax.plot(x_smooth, y_smooth, color='red', label='Modelo')
+            ax.set_title(subtitle, fontsize=9)
+            ax.set_xlabel(label_x)
+
+        ax.set_ylabel(label_y)
+        ax.legend()
+        ax.grid(True, linestyle='--', alpha=0.5)
+        st.pyplot(fig)
+        
+        buf = BytesIO()
+        fig.savefig(buf, format="png", dpi=300)
+        st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
