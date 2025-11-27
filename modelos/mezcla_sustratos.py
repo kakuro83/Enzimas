@@ -1,15 +1,8 @@
 import numpy as np
 
 def hill_generalizado_mezcla(X, Vmax, K_half, n, beta):
-    """
-    Modelo de Hill generalizado para mezclas de sustratos.
-    X: Lista o array conteniendo [S1, S2] donde:
-       S1: Concentración sustrato 1
-       S2: Concentración sustrato 2
-    Vmax: Velocidad máxima
-    K_half: Constante de afinidad media
-    n: Coeficiente de forma
-    beta: Factor de interacción o contribución de S2
+    r"""
+    v = \frac{V_{\max}\, (S_1 + \beta S_2)^n}{K_{\mathrm{half}}^{\,n} + (S_1 + \beta S_2)^n}
     """
     S1, S2 = X  # Desempaquetamos las variables
     
