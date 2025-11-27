@@ -102,31 +102,33 @@ sig = inspect.signature(funcion_modelo)
 param_names = list(sig.parameters.keys())[1:] 
 
 # --- CONFIGURACIÓN DE PARÁMETROS (Manual/Fijo) ---
-st.markdown("##### Opciones Avanzadas: Valores Iniciales")
-st.caption("Modifica la estimación inicial o marca **'Fijar'** para bloquear una constante (ej. 'n' constante).")
+# Envolvemos en un expander para mantener la interfaz limpia
+with st.expander("🛠️ Opciones Avanzadas: Valores Iniciales y Parámetros Fijos"):
+    st.markdown("##### Estimación de Valores Iniciales")
+    st.caption("El algoritmo intenta adivinar los valores iniciales. Aquí puedes modificarlos manualmente o **fijar** una constante (ej. 'n' de Hill) para que no cambie durante el ajuste.")
 
-# Diccionario para guardar configuración del usuario
-param_settings = {}
-v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
+    # Diccionario para guardar configuración del usuario
+    param_settings = {}
+    v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
 
-for p in param_names:
-    col_lbl, col_val, col_fix = st.columns([1, 2, 1])
-    
-    # Heurística simple para valor por defecto
-    default_val = 1.0
-    if "Vmax" in p: default_val = float(v_max_guess)
-    elif "n" in p: default_val = 1.0
-    elif not df.empty and ("Km" in p or "K_" in p): 
-        default_val = float(np.mean(df.iloc[:, 1]))
-    
-    with col_lbl:
-        st.markdown(f"**{p}**")
-    with col_val:
-        val = st.number_input(f"Valor {p}", value=default_val, label_visibility="collapsed", key=f"val_{p}_{nombre_modelo}")
-    with col_fix:
-        fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
-    
-    param_settings[p] = {"value": val, "fixed": fixed}
+    for p in param_names:
+        col_lbl, col_val, col_fix = st.columns([1, 2, 1])
+        
+        # Heurística simple para valor por defecto
+        default_val = 1.0
+        if "Vmax" in p: default_val = float(v_max_guess)
+        elif "n" in p: default_val = 1.0
+        elif not df.empty and ("Km" in p or "K_" in p): 
+            default_val = float(np.mean(df.iloc[:, 1]))
+        
+        with col_lbl:
+            st.markdown(f"**{p}**")
+        with col_val:
+            val = st.number_input(f"Valor {p}", value=default_val, label_visibility="collapsed", key=f"val_{p}_{nombre_modelo}")
+        with col_fix:
+            fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
+        
+        param_settings[p] = {"value": val, "fixed": fixed}
 
 # Estética Gráfica
 st.markdown("##### Estética de Gráfica")
@@ -274,13 +276,18 @@ if st.session_state.resultados:
 
         # Layout condicional
         if modalidad == "Un solo sustrato":
-            # LAYOUT UN SUSTRATO
-            col_res1, col_res2 = st.columns([1, 2])
+            # LAYOUT UN SUSTRATO - Modificado para que las tablas estén arriba y gráfico abajo
             
-            with col_res1:
+            # 1. Tablas en paralelo
+            c_table, c_stats = st.columns([1, 1])
+            
+            with c_table:
                 st.markdown("### Parámetros")
                 st.dataframe(df_params, hide_index=True, use_container_width=True)
-                
+                csv = df_params.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Tabla Parámetros", csv, "constantes.csv", "text/csv")
+            
+            with c_stats:
                 st.markdown("### Estadísticas")
                 # Configuramos la columna 'Estadístico' para tener el tooltip de ayuda
                 st.dataframe(
@@ -290,36 +297,34 @@ if st.session_state.resultados:
                     column_config={
                         "Estadístico": st.column_config.TextColumn(
                             "Métrica", 
-                            help=ayuda_stats, # Aquí va el logo ? con la info completa
+                            help=ayuda_stats, 
                             width="medium"
                         ),
                         "Valor": st.column_config.NumberColumn("Valor", format="%.4f")
                     }
                 )
-                
-                csv = df_params.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Tabla Parámetros", csv, "constantes.csv", "text/csv")
 
-            with col_res2:
-                # GRÁFICO 2D
-                fig, ax = plt.subplots()
-                label_y = f"Velocidad ({unidad_v})"
-                
-                x_vals = res["x_data"]
-                ax.scatter(x_vals, res["y_data"], color='blue', label='Experimental', zorder=2)
-                
-                x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
-                y_smooth = funcion_modelo(x_smooth, *res["popt"])
-                ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
-                ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
-                ax.set_ylabel(label_y)
-                ax.legend()
-                ax.grid(True, linestyle='--', alpha=0.5)
-                st.pyplot(fig)
-                
-                buf = BytesIO()
-                fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
-                st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
+            # 2. Gráfico debajo
+            st.divider()
+            st.markdown("### Visualización Gráfica")
+            fig, ax = plt.subplots()
+            label_y = f"Velocidad ({unidad_v})"
+            
+            x_vals = res["x_data"]
+            ax.scatter(x_vals, res["y_data"], color='blue', label='Experimental', zorder=2)
+            
+            x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+            y_smooth = funcion_modelo(x_smooth, *res["popt"])
+            ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
+            ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+            ax.set_ylabel(label_y)
+            ax.legend()
+            ax.grid(True, linestyle='--', alpha=0.5)
+            st.pyplot(fig)
+            
+            buf = BytesIO()
+            fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
+            st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
         
         else:
             # LAYOUT MULTISUSTRATO
