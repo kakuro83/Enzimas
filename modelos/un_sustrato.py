@@ -1,8 +1,8 @@
 import numpy as np
 
 def michaelis_menten(S, Vmax, Km):
-    """
-    plt.title(r"$V = \frac{V_{\max}\, S}{K_m + S}$")
+    r"""
+    $V = \frac{V_{\max}\, S}{K_m + S}$
     """
     return (Vmax * S) / (Km + S)
 
