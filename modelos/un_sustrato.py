@@ -2,7 +2,7 @@ import numpy as np
 
 def michaelis_menten(S, Vmax, Km):
     """
-V = (Vmax * S) / (K_m + S)
+V = (V_max * S) / (K_m + S)
     """
     return (Vmax * S) / (Km + S)
 
