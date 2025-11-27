@@ -89,41 +89,47 @@ else:
 nombre_modelo = st.selectbox("Seleccione el modelo cinético:", list(model_options.keys()))
 funcion_modelo = model_options[nombre_modelo]
 
+# --- VISUALIZACIÓN DE ECUACIÓN (Estilo LaTeX) ---
+# Busca el docstring de la función y lo muestra como fórmula matemática
+doc_ecuacion = inspect.getdoc(funcion_modelo)
+if doc_ecuacion:
+    st.latex(doc_ecuacion)
+else:
+    st.info("Ecuación no disponible en la documentación del modelo.")
+
 # Detección de parámetros
 sig = inspect.signature(funcion_modelo)
 param_names = list(sig.parameters.keys())[1:] 
 
 # --- CONFIGURACIÓN DE PARÁMETROS (Manual/Fijo) ---
-# Envolvemos en un expander para mantener la interfaz limpia
-with st.expander("🛠️ Opciones Avanzadas: Valores Iniciales y Parámetros Fijos"):
-    st.markdown("##### Estimación de Valores Iniciales")
-    st.caption("El algoritmo intenta adivinar los valores iniciales. Aquí puedes modificarlos manualmente o **fijar** una constante (ej. 'n' de Hill) para que no cambie durante el ajuste.")
+st.markdown("##### Opciones Avanzadas: Valores Iniciales")
+st.caption("Modifica la estimación inicial o marca **'Fijar'** para bloquear una constante (ej. 'n' constante).")
 
-    # Diccionario para guardar configuración del usuario
-    param_settings = {}
-    v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
+# Diccionario para guardar configuración del usuario
+param_settings = {}
+v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
 
-    for p in param_names:
-        col_lbl, col_val, col_fix = st.columns([1, 2, 1])
-        
-        # Heurística simple para valor por defecto
-        default_val = 1.0
-        if "Vmax" in p: default_val = float(v_max_guess)
-        elif "n" in p: default_val = 1.0
-        elif not df.empty and ("Km" in p or "K_" in p): 
-            default_val = float(np.mean(df.iloc[:, 1]))
-        
-        with col_lbl:
-            st.markdown(f"**{p}**")
-        with col_val:
-            val = st.number_input(f"Valor {p}", value=default_val, key=f"val_{p}_{nombre_modelo}")
-        with col_fix:
-            fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
-        
-        param_settings[p] = {"value": val, "fixed": fixed}
+for p in param_names:
+    col_lbl, col_val, col_fix = st.columns([1, 2, 1])
+    
+    # Heurística simple para valor por defecto
+    default_val = 1.0
+    if "Vmax" in p: default_val = float(v_max_guess)
+    elif "n" in p: default_val = 1.0
+    elif not df.empty and ("Km" in p or "K_" in p): 
+        default_val = float(np.mean(df.iloc[:, 1]))
+    
+    with col_lbl:
+        st.markdown(f"**{p}**")
+    with col_val:
+        val = st.number_input(f"Valor {p}", value=default_val, label_visibility="collapsed", key=f"val_{p}_{nombre_modelo}")
+    with col_fix:
+        fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
+    
+    param_settings[p] = {"value": val, "fixed": fixed}
 
 # Estética Gráfica
-st.markdown("##### Estética")
+st.markdown("##### Estética de Gráfica")
 c_units1, c_units2 = st.columns(2)
 with c_units1:
     unidad_v = st.text_input("Unidades Velocidad:", value="mM/min")
@@ -252,16 +258,19 @@ if st.session_state.resultados:
             "Valor": res["popt"]
         })
 
+        # Tabla de estadísticas limpia (sin columna de descripción)
         df_stats = pd.DataFrame({
             "Estadístico": ["R²", "RMSE", "MAE", "AIC"],
-            "Valor": [res['r2'], res['rmse'], res['mae'], res['aic']],
-            "Descripción": [
-                "Coeficiente de determinación (cercano a 1 es mejor)",
-                "Raíz del Error Cuadrático Medio (misma unidad que Velocidad)",
-                "Error Absoluto Medio",
-                "Criterio de Akaike (menor valor indica mejor modelo)"
-            ]
+            "Valor": [res['r2'], res['rmse'], res['mae'], res['aic']]
         })
+        
+        # Texto de ayuda consolidado
+        ayuda_stats = """
+        R²: Coeficiente de determinación. Cercano a 1 es mejor.
+        RMSE: Raíz del Error Cuadrático Medio. Misma unidad que Velocidad.
+        MAE: Error Absoluto Medio.
+        AIC: Criterio de Akaike. Menor valor indica mejor modelo.
+        """
 
         # Layout condicional
         if modalidad == "Un solo sustrato":
@@ -273,15 +282,18 @@ if st.session_state.resultados:
                 st.dataframe(df_params, hide_index=True, use_container_width=True)
                 
                 st.markdown("### Estadísticas")
-                # Mostramos tabla con configuración de columnas para tooltips
+                # Configuramos la columna 'Estadístico' para tener el tooltip de ayuda
                 st.dataframe(
                     df_stats, 
                     hide_index=True, 
                     use_container_width=True,
                     column_config={
-                        "Estadístico": st.column_config.TextColumn("Métrica", help="Nombre del indicador estadístico"),
-                        "Valor": st.column_config.NumberColumn("Valor", format="%.4f"),
-                        "Descripción": st.column_config.TextColumn("Ayuda", width="small")
+                        "Estadístico": st.column_config.TextColumn(
+                            "Métrica", 
+                            help=ayuda_stats, # Aquí va el logo ? con la info completa
+                            width="medium"
+                        ),
+                        "Valor": st.column_config.NumberColumn("Valor", format="%.4f")
                     }
                 )
                 
@@ -324,14 +336,16 @@ if st.session_state.resultados:
             
             with c_stats:
                 st.markdown("#### Bondad de Ajuste")
-                # Tabla de estadísticas unificada con tooltips en la columna de descripción
                 st.dataframe(
                     df_stats, 
                     hide_index=True, 
                     use_container_width=True,
                     column_config={
-                        "Estadístico": st.column_config.TextColumn("Métrica"),
-                        "Valor": st.column_config.NumberColumn("Valor", format="%.4f"),
-                        "Descripción": st.column_config.TextColumn("Ayuda / Descripción", width="medium")
+                        "Estadístico": st.column_config.TextColumn(
+                            "Métrica", 
+                            help=ayuda_stats,
+                            width="medium"
+                        ),
+                        "Valor": st.column_config.NumberColumn("Valor", format="%.4f")
                     }
                 )
