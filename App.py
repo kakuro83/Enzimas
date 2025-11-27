@@ -94,34 +94,35 @@ sig = inspect.signature(funcion_modelo)
 param_names = list(sig.parameters.keys())[1:] 
 
 # --- CONFIGURACIÓN DE PARÁMETROS (Manual/Fijo) ---
-st.markdown("##### Parámetros y Valores Iniciales")
-st.caption("Ajusta los valores iniciales. Marca **'Fijar'** si quieres que un parámetro (ej. exponente 'n') se mantenga constante y no sea modificado por el ajuste.")
+# Envolvemos en un expander para mantener la interfaz limpia
+with st.expander("🛠️ Opciones Avanzadas: Valores Iniciales y Parámetros Fijos"):
+    st.markdown("##### Estimación de Valores Iniciales")
+    st.caption("El algoritmo intenta adivinar los valores iniciales. Aquí puedes modificarlos manualmente o **fijar** una constante (ej. 'n' de Hill) para que no cambie durante el ajuste.")
 
-# Diccionario para guardar configuración del usuario
-param_settings = {}
-v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
+    # Diccionario para guardar configuración del usuario
+    param_settings = {}
+    v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
 
-for p in param_names:
-    col_lbl, col_val, col_fix = st.columns([1, 2, 1])
-    
-    # Heurística simple para valor por defecto
-    default_val = 1.0
-    if "Vmax" in p: default_val = float(v_max_guess)
-    elif "n" in p: default_val = 1.0
-    elif not df.empty and ("Km" in p or "K_" in p): 
-        default_val = float(np.mean(df.iloc[:, 1]))
-    
-    with col_lbl:
-        st.markdown(f"**{p}**")
-    with col_val:
-        # Usamos claves únicas para evitar conflictos al cambiar de modelo
-        val = st.number_input(f"Valor {p}", value=default_val, key=f"val_{p}_{nombre_modelo}")
-    with col_fix:
-        fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
-    
-    param_settings[p] = {"value": val, "fixed": fixed}
+    for p in param_names:
+        col_lbl, col_val, col_fix = st.columns([1, 2, 1])
+        
+        # Heurística simple para valor por defecto
+        default_val = 1.0
+        if "Vmax" in p: default_val = float(v_max_guess)
+        elif "n" in p: default_val = 1.0
+        elif not df.empty and ("Km" in p or "K_" in p): 
+            default_val = float(np.mean(df.iloc[:, 1]))
+        
+        with col_lbl:
+            st.markdown(f"**{p}**")
+        with col_val:
+            val = st.number_input(f"Valor {p}", value=default_val, key=f"val_{p}_{nombre_modelo}")
+        with col_fix:
+            fixed = st.checkbox("Fijar", key=f"fix_{p}_{nombre_modelo}")
+        
+        param_settings[p] = {"value": val, "fixed": fixed}
 
-# Estética Gráfica (Solo visible si es un sustrato, o para unidades generales)
+# Estética Gráfica
 st.markdown("##### Estética")
 c_units1, c_units2 = st.columns(2)
 with c_units1:
@@ -198,22 +199,21 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
             # R2
             r2 = r2_score(y_data, y_pred)
             
-            # RMSE (Root Mean Squared Error)
+            # RMSE
             rmse = np.sqrt(mean_squared_error(y_data, y_pred))
             
-            # MAE (Mean Absolute Error)
+            # MAE
             mae = mean_absolute_error(y_data, y_pred)
             
-            # AIC (Akaike Information Criterion) - Aproximación para mínimos cuadrados
-            # AIC = n * ln(RSS/n) + 2k
+            # AIC
             n = len(y_data)
             rss = np.sum((y_data - y_pred)**2)
-            k = len(free_params_keys) + 1 # Parámetros libres + estimación varianza
+            k = len(free_params_keys) + 1 
             
             if rss > 0:
                 aic = n * np.log(rss/n) + 2 * k
             else:
-                aic = -np.inf # Ajuste perfecto
+                aic = -np.inf 
 
             # GUARDAR EN SESSION STATE
             st.session_state.resultados = {
@@ -246,27 +246,47 @@ if st.session_state.resultados:
     else:
         st.success("¡Resultados disponibles!")
         
-        # Lógica de visualización dividida por modalidad
+        # Preparar DataFrames para tablas
+        df_params = pd.DataFrame({
+            "Parámetro": res["param_names"],
+            "Valor": res["popt"]
+        })
+
+        df_stats = pd.DataFrame({
+            "Estadístico": ["R²", "RMSE", "MAE", "AIC"],
+            "Valor": [res['r2'], res['rmse'], res['mae'], res['aic']],
+            "Descripción": [
+                "Coeficiente de determinación (cercano a 1 es mejor)",
+                "Raíz del Error Cuadrático Medio (misma unidad que Velocidad)",
+                "Error Absoluto Medio",
+                "Criterio de Akaike (menor valor indica mejor modelo)"
+            ]
+        })
+
+        # Layout condicional
         if modalidad == "Un solo sustrato":
-            # LAYOUT PARA UN SUSTRATO (Tabla + Gráfica)
+            # LAYOUT UN SUSTRATO
             col_res1, col_res2 = st.columns([1, 2])
             
             with col_res1:
                 st.markdown("### Parámetros")
-                results_df = pd.DataFrame({
-                    "Parámetro": res["param_names"],
-                    "Valor": res["popt"]
-                })
-                st.dataframe(results_df, hide_index=True)
+                st.dataframe(df_params, hide_index=True, use_container_width=True)
                 
                 st.markdown("### Estadísticas")
-                st.metric("R²", f"{res['r2']:.4f}")
-                st.metric("RMSE", f"{res['rmse']:.4f}")
-                st.metric("MAE", f"{res['mae']:.4f}")
-                st.metric("AIC", f"{res['aic']:.2f}")
+                # Mostramos tabla con configuración de columnas para tooltips
+                st.dataframe(
+                    df_stats, 
+                    hide_index=True, 
+                    use_container_width=True,
+                    column_config={
+                        "Estadístico": st.column_config.TextColumn("Métrica", help="Nombre del indicador estadístico"),
+                        "Valor": st.column_config.NumberColumn("Valor", format="%.4f"),
+                        "Descripción": st.column_config.TextColumn("Ayuda", width="small")
+                    }
+                )
                 
-                csv = results_df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Tabla CSV", csv, "constantes.csv", "text/csv")
+                csv = df_params.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Tabla Parámetros", csv, "constantes.csv", "text/csv")
 
             with col_res2:
                 # GRÁFICO 2D
@@ -290,30 +310,28 @@ if st.session_state.resultados:
                 st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
         
         else:
-            # LAYOUT PARA MULTISUSTRATO (Solo Tabla Extendida y Estadísticas)
+            # LAYOUT MULTISUSTRATO
             st.markdown("### Resultados del Ajuste Multisustrato")
             
-            # Usamos columnas para distribuir la información ordenadamente
             c_table, c_stats = st.columns([1, 1])
             
             with c_table:
                 st.markdown("#### Parámetros Cinéticos")
-                results_df = pd.DataFrame({
-                    "Parámetro": res["param_names"],
-                    "Valor": res["popt"]
-                })
-                st.dataframe(results_df, hide_index=True, use_container_width=True)
+                st.dataframe(df_params, hide_index=True, use_container_width=True)
                 
-                csv = results_df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Descargar Resultados CSV", csv, "resultados_cineticos.csv", "text/csv")
+                csv = df_params.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar Parámetros", csv, "resultados_cineticos.csv", "text/csv")
             
             with c_stats:
                 st.markdown("#### Bondad de Ajuste")
-                # Grid de métricas
-                m1, m2 = st.columns(2)
-                m3, m4 = st.columns(2)
-                
-                m1.metric("R² (Coef. Determinación)", f"{res['r2']:.4f}", help="Cercano a 1 es mejor")
-                m2.metric("RMSE (Error Cuadrático)", f"{res['rmse']:.4f}", help="En las mismas unidades que la velocidad")
-                m3.metric("MAE (Error Absoluto)", f"{res['mae']:.4f}", help="Promedio de error absoluto")
-                m4.metric("AIC (Criterio Akaike)", f"{res['aic']:.2f}", help="Menor valor indica mejor modelo (balance ajuste/complejidad)")
+                # Tabla de estadísticas unificada con tooltips en la columna de descripción
+                st.dataframe(
+                    df_stats, 
+                    hide_index=True, 
+                    use_container_width=True,
+                    column_config={
+                        "Estadístico": st.column_config.TextColumn("Métrica"),
+                        "Valor": st.column_config.NumberColumn("Valor", format="%.4f"),
+                        "Descripción": st.column_config.TextColumn("Ayuda / Descripción", width="medium")
+                    }
+                )
