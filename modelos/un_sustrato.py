@@ -17,3 +17,13 @@ def hill(S, Vmax, Kd, n):
     V = \frac{V_{\max}\, S^n}{K_d^n + S^n}
     """
     return (Vmax * (S**n)) / (Kd**n + S**n)
+
+def adair_simple(S, Vmax, K1, K2):
+    r"""
+    Y = \frac{K_1 S + 2 K_1 K_2 S^2}{1 + K_1 S + K_1 K_2 S^2}
+    V = V_{\max}\, Y
+    """
+    num = K1*S + 2*K1*K2*(S**2)
+    den = 1 + K1*S + K1*K2*(S**2)
+    Y = num / den
+    return Vmax * Y
