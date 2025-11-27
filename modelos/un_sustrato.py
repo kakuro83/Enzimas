@@ -2,10 +2,7 @@ import numpy as np
 
 def michaelis_menten(S, Vmax, Km):
     """
-    Modelo de Michaelis-Menten.
-    S: Concentración de sustrato
-    Vmax: Velocidad máxima
-    Km: Constante de Michaelis
+V = (Vmax * S) / (K_m + S)
     """
     return (Vmax * S) / (Km + S)
 
