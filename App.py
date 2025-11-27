@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D # Importación necesaria para gráficos 3D
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
 from io import BytesIO
@@ -156,7 +157,6 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
 
             # Definir función wrapper para curve_fit que maneje fijos
             def model_wrapper(x, *free_args):
-                # Reconstruir lista completa de argumentos para la función original
                 full_args = []
                 free_idx = 0
                 for name in param_names:
@@ -169,7 +169,6 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
 
             # Optimización
             if not free_params_keys:
-                # Caso raro: Todos los parámetros están fijos
                 popt_free = []
                 popt_full = [param_settings[p]["value"] for p in param_names]
                 st.info("Todos los parámetros están fijos. Se calcula solo R².")
@@ -180,10 +179,10 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
                     y_data, 
                     p0=p0, 
                     maxfev=10000,
-                    bounds=(0, np.inf) # Asumiendo positivos
+                    bounds=(0, np.inf) 
                 )
                 
-                # Reconstruir parámetros completos para mostrar
+                # Reconstruir parámetros completos
                 popt_full = []
                 free_idx = 0
                 for p in param_names:
@@ -210,7 +209,7 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
                 "s2_vals": df[col_s2_name].values if len(cols) > 2 else None
             }
             
-            st.rerun() # Recargar para mostrar resultados desde el bloque persistente
+            st.rerun() 
 
         except Exception as e:
             st.error(f"Error en el cálculo: {e}")
@@ -235,11 +234,12 @@ if st.session_state.resultados:
         st.download_button("📥 Descargar Tabla CSV", csv, "constantes.csv", "text/csv")
 
     with col_res2:
-        fig, ax = plt.subplots()
-        label_y = f"Velocidad ({unidad_v})"
-        
-        # Lógica de graficado usando los datos guardados
+        # Lógica de graficado
         if modalidad == "Un solo sustrato":
+            # GRÁFICO 2D (Estándar)
+            fig, ax = plt.subplots()
+            label_y = f"Velocidad ({unidad_v})"
+            
             x_vals = res["x_data"]
             ax.scatter(x_vals, res["y_data"], color='blue', label='Experimental', zorder=2)
             
@@ -247,43 +247,48 @@ if st.session_state.resultados:
             y_smooth = funcion_modelo(x_smooth, *res["popt"])
             ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
             ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+            ax.set_ylabel(label_y)
+            ax.legend()
+            ax.grid(True, linestyle='--', alpha=0.5)
+            st.pyplot(fig)
             
         else:
-            # Graficado Multisustrato
-            axis_choice = st.radio("Eje X para gráfica:", [res["s1_col"], res["s2_col"]], horizontal=True)
+            # GRÁFICO 3D (Multisustrato)
+            fig = plt.figure(figsize=(7, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            
             s1_vals = res["s1_vals"]
             s2_vals = res["s2_vals"]
             
-            if axis_choice == res["s1_col"]:
-                x_plot = s1_vals
-                x_smooth = np.linspace(min(s1_vals), max(s1_vals), 100)
-                # Proyección: S2 constante en promedio
-                x_fixed = np.full(100, np.mean(s2_vals))
-                x_model_input = [x_smooth, x_fixed]
-                
-                label_x = f"{res['s1_col']} ({unidad_s})"
-                subtitle = f"(A {res['s2_col']} cte = {np.mean(s2_vals):.2f})"
-            else:
-                x_plot = s2_vals
-                x_smooth = np.linspace(min(s2_vals), max(s2_vals), 100)
-                # Proyección: S1 constante en promedio
-                x_fixed = np.full(100, np.mean(s1_vals))
-                x_model_input = [x_fixed, x_smooth]
-                
-                label_x = f"{res['s2_col']} ({unidad_s})"
-                subtitle = f"(A {res['s1_col']} cte = {np.mean(s1_vals):.2f})"
+            # 1. Puntos Experimentales (Scatter 3D)
+            ax.scatter(s1_vals, s2_vals, res["y_data"], c='blue', marker='o', label='Experimental', s=40, depthshade=False)
+            
+            # 2. Superficie del Modelo
+            # Creamos una malla (grid) que cubra el rango de datos
+            s1_range = np.linspace(min(s1_vals), max(s1_vals), 30)
+            s2_range = np.linspace(min(s2_vals), max(s2_vals), 30)
+            S1_MESH, S2_MESH = np.meshgrid(s1_range, s2_range)
+            
+            # Calculamos la velocidad en cada punto de la malla
+            # Flatten para pasar al modelo y luego reshape para graficar
+            Z_MESH = funcion_modelo([S1_MESH.ravel(), S2_MESH.ravel()], *res["popt"])
+            Z_MESH = Z_MESH.reshape(S1_MESH.shape)
+            
+            # Graficamos la superficie con un mapa de color 'viridis'
+            ax.plot_surface(S1_MESH, S2_MESH, Z_MESH, cmap='viridis', alpha=0.6, edgecolor='none')
+            
+            # Etiquetas
+            ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+            ax.set_ylabel(f"{res['s2_col']} ({unidad_s})")
+            ax.set_zlabel(f"Velocidad ({unidad_v})")
+            ax.set_title(f"Ajuste 3D - {nombre_modelo}", fontsize=10)
+            
+            # Ajuste de vista inicial
+            ax.view_init(elev=20, azim=45)
+            
+            st.pyplot(fig)
 
-            ax.scatter(x_plot, res["y_data"], color='blue', label='Experimental')
-            y_smooth = funcion_modelo(x_model_input, *res["popt"])
-            ax.plot(x_smooth, y_smooth, color='red', label='Modelo')
-            ax.set_title(subtitle, fontsize=9)
-            ax.set_xlabel(label_x)
-
-        ax.set_ylabel(label_y)
-        ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.5)
-        st.pyplot(fig)
-        
+        # Botón de descarga común
         buf = BytesIO()
-        fig.savefig(buf, format="png", dpi=300)
+        fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
         st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
