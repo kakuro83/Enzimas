@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D # Importación necesaria para gráficos 3D
+# Eliminamos mpl_toolkits.mplot3d ya que no se usará
 from scipy.optimize import curve_fit
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from io import BytesIO
 import inspect
 
@@ -121,7 +121,7 @@ for p in param_names:
     
     param_settings[p] = {"value": val, "fixed": fixed}
 
-# Estética Gráfica
+# Estética Gráfica (Solo visible si es un sustrato, o para unidades generales)
 st.markdown("##### Estética")
 c_units1, c_units2 = st.columns(2)
 with c_units1:
@@ -192,23 +192,43 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
                         popt_full.append(popt_free[free_idx])
                         free_idx += 1
 
-            # Calcular R2
+            # Calcular Estadísticas
             y_pred = funcion_modelo(x_data, *popt_full)
+            
+            # R2
             r2 = r2_score(y_data, y_pred)
+            
+            # RMSE (Root Mean Squared Error)
+            rmse = np.sqrt(mean_squared_error(y_data, y_pred))
+            
+            # MAE (Mean Absolute Error)
+            mae = mean_absolute_error(y_data, y_pred)
+            
+            # AIC (Akaike Information Criterion) - Aproximación para mínimos cuadrados
+            # AIC = n * ln(RSS/n) + 2k
+            n = len(y_data)
+            rss = np.sum((y_data - y_pred)**2)
+            k = len(free_params_keys) + 1 # Parámetros libres + estimación varianza
+            
+            if rss > 0:
+                aic = n * np.log(rss/n) + 2 * k
+            else:
+                aic = -np.inf # Ajuste perfecto
 
             # GUARDAR EN SESSION STATE
             st.session_state.resultados = {
-                "modalidad": modalidad, # Guardamos contexto para validación
+                "modalidad": modalidad,
                 "model_name": nombre_modelo,
                 "popt": popt_full,
                 "r2": r2,
+                "rmse": rmse,
+                "mae": mae,
+                "aic": aic,
                 "param_names": param_names,
                 "x_data": x_data,
                 "y_data": y_data,
                 "s1_col": col_s1_name,
                 "s2_col": col_s2_name if len(cols) > 2 else None,
-                "s1_vals": df[col_s1_name].values,
-                "s2_vals": df[col_s2_name].values if len(cols) > 2 else None
             }
             
             st.rerun() 
@@ -220,30 +240,36 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
 if st.session_state.resultados:
     res = st.session_state.resultados
     
-    # VALIDACIÓN DE CONSISTENCIA: Si la config cambió, no mostrar resultados antiguos para evitar crash
+    # VALIDACIÓN DE CONSISTENCIA
     if res.get("modalidad") != modalidad or res.get("model_name") != nombre_modelo:
         st.info("⚠️ La configuración ha cambiado. Por favor, ejecuta el ajuste nuevamente para actualizar los resultados.")
     else:
         st.success("¡Resultados disponibles!")
         
-        col_res1, col_res2 = st.columns([1, 2])
-        
-        with col_res1:
-            st.markdown("### Parámetros")
-            results_df = pd.DataFrame({
-                "Parámetro": res["param_names"],
-                "Valor": res["popt"]
-            })
-            st.dataframe(results_df, hide_index=True)
-            st.metric("R²", f"{res['r2']:.4f}")
+        # Lógica de visualización dividida por modalidad
+        if modalidad == "Un solo sustrato":
+            # LAYOUT PARA UN SUSTRATO (Tabla + Gráfica)
+            col_res1, col_res2 = st.columns([1, 2])
             
-            csv = results_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Descargar Tabla CSV", csv, "constantes.csv", "text/csv")
+            with col_res1:
+                st.markdown("### Parámetros")
+                results_df = pd.DataFrame({
+                    "Parámetro": res["param_names"],
+                    "Valor": res["popt"]
+                })
+                st.dataframe(results_df, hide_index=True)
+                
+                st.markdown("### Estadísticas")
+                st.metric("R²", f"{res['r2']:.4f}")
+                st.metric("RMSE", f"{res['rmse']:.4f}")
+                st.metric("MAE", f"{res['mae']:.4f}")
+                st.metric("AIC", f"{res['aic']:.2f}")
+                
+                csv = results_df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Tabla CSV", csv, "constantes.csv", "text/csv")
 
-        with col_res2:
-            # Lógica de graficado
-            if modalidad == "Un solo sustrato":
-                # GRÁFICO 2D (Estándar)
+            with col_res2:
+                # GRÁFICO 2D
                 fig, ax = plt.subplots()
                 label_y = f"Velocidad ({unidad_v})"
                 
@@ -259,46 +285,35 @@ if st.session_state.resultados:
                 ax.grid(True, linestyle='--', alpha=0.5)
                 st.pyplot(fig)
                 
-            else:
-                # GRÁFICO 3D (Multisustrato)
-                fig = plt.figure(figsize=(7, 6))
-                ax = fig.add_subplot(111, projection='3d')
+                buf = BytesIO()
+                fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
+                st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
+        
+        else:
+            # LAYOUT PARA MULTISUSTRATO (Solo Tabla Extendida y Estadísticas)
+            st.markdown("### Resultados del Ajuste Multisustrato")
+            
+            # Usamos columnas para distribuir la información ordenadamente
+            c_table, c_stats = st.columns([1, 1])
+            
+            with c_table:
+                st.markdown("#### Parámetros Cinéticos")
+                results_df = pd.DataFrame({
+                    "Parámetro": res["param_names"],
+                    "Valor": res["popt"]
+                })
+                st.dataframe(results_df, hide_index=True, use_container_width=True)
                 
-                s1_vals = res["s1_vals"]
-                s2_vals = res["s2_vals"]
+                csv = results_df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Descargar Resultados CSV", csv, "resultados_cineticos.csv", "text/csv")
+            
+            with c_stats:
+                st.markdown("#### Bondad de Ajuste")
+                # Grid de métricas
+                m1, m2 = st.columns(2)
+                m3, m4 = st.columns(2)
                 
-                # 1. Puntos Experimentales (Scatter 3D)
-                ax.scatter(s1_vals, s2_vals, res["y_data"], c='blue', marker='o', label='Experimental', s=40, depthshade=False)
-                
-                # 2. Superficie del Modelo
-                # Creamos una malla (grid) que cubra el rango de datos
-                s1_range = np.linspace(min(s1_vals), max(s1_vals), 30)
-                s2_range = np.linspace(min(s2_vals), max(s2_vals), 30)
-                S1_MESH, S2_MESH = np.meshgrid(s1_range, s2_range)
-                
-                # Calculamos la velocidad en cada punto de la malla
-                # Flatten para pasar al modelo y luego reshape para graficar
-                Z_MESH = funcion_modelo([S1_MESH.ravel(), S2_MESH.ravel()], *res["popt"])
-                Z_MESH = Z_MESH.reshape(S1_MESH.shape)
-                
-                # Graficamos la superficie con un mapa de color 'viridis'
-                ax.plot_surface(S1_MESH, S2_MESH, Z_MESH, cmap='viridis', alpha=0.6, edgecolor='none')
-                
-                # Etiquetas
-                ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
-                ax.set_ylabel(f"{res['s2_col']} ({unidad_s})")
-                
-                # Corrección del título de eje Z (Padding para que no se oculte)
-                ax.set_zlabel(f"Velocidad ({unidad_v})", labelpad=10)
-                
-                ax.set_title(f"Ajuste 3D - {nombre_modelo}", fontsize=10)
-                
-                # Ajuste de vista inicial
-                ax.view_init(elev=20, azim=45)
-                
-                st.pyplot(fig)
-
-            # Botón de descarga común
-            buf = BytesIO()
-            fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
-            st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
+                m1.metric("R² (Coef. Determinación)", f"{res['r2']:.4f}", help="Cercano a 1 es mejor")
+                m2.metric("RMSE (Error Cuadrático)", f"{res['rmse']:.4f}", help="En las mismas unidades que la velocidad")
+                m3.metric("MAE (Error Absoluto)", f"{res['mae']:.4f}", help="Promedio de error absoluto")
+                m4.metric("AIC (Criterio Akaike)", f"{res['aic']:.2f}", help="Menor valor indica mejor modelo (balance ajuste/complejidad)")
