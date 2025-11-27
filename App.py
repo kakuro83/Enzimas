@@ -198,6 +198,8 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
 
             # GUARDAR EN SESSION STATE
             st.session_state.resultados = {
+                "modalidad": modalidad, # Guardamos contexto para validación
+                "model_name": nombre_modelo,
                 "popt": popt_full,
                 "r2": r2,
                 "param_names": param_names,
@@ -217,78 +219,86 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
 # --- 5. MOSTRAR RESULTADOS (PERSISTENTE) ---
 if st.session_state.resultados:
     res = st.session_state.resultados
-    st.success("¡Resultados disponibles!")
     
-    col_res1, col_res2 = st.columns([1, 2])
-    
-    with col_res1:
-        st.markdown("### Parámetros")
-        results_df = pd.DataFrame({
-            "Parámetro": res["param_names"],
-            "Valor": res["popt"]
-        })
-        st.dataframe(results_df, hide_index=True)
-        st.metric("R²", f"{res['r2']:.4f}")
+    # VALIDACIÓN DE CONSISTENCIA: Si la config cambió, no mostrar resultados antiguos para evitar crash
+    if res.get("modalidad") != modalidad or res.get("model_name") != nombre_modelo:
+        st.info("⚠️ La configuración ha cambiado. Por favor, ejecuta el ajuste nuevamente para actualizar los resultados.")
+    else:
+        st.success("¡Resultados disponibles!")
         
-        csv = results_df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar Tabla CSV", csv, "constantes.csv", "text/csv")
+        col_res1, col_res2 = st.columns([1, 2])
+        
+        with col_res1:
+            st.markdown("### Parámetros")
+            results_df = pd.DataFrame({
+                "Parámetro": res["param_names"],
+                "Valor": res["popt"]
+            })
+            st.dataframe(results_df, hide_index=True)
+            st.metric("R²", f"{res['r2']:.4f}")
+            
+            csv = results_df.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Descargar Tabla CSV", csv, "constantes.csv", "text/csv")
 
-    with col_res2:
-        # Lógica de graficado
-        if modalidad == "Un solo sustrato":
-            # GRÁFICO 2D (Estándar)
-            fig, ax = plt.subplots()
-            label_y = f"Velocidad ({unidad_v})"
-            
-            x_vals = res["x_data"]
-            ax.scatter(x_vals, res["y_data"], color='blue', label='Experimental', zorder=2)
-            
-            x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
-            y_smooth = funcion_modelo(x_smooth, *res["popt"])
-            ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
-            ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
-            ax.set_ylabel(label_y)
-            ax.legend()
-            ax.grid(True, linestyle='--', alpha=0.5)
-            st.pyplot(fig)
-            
-        else:
-            # GRÁFICO 3D (Multisustrato)
-            fig = plt.figure(figsize=(7, 6))
-            ax = fig.add_subplot(111, projection='3d')
-            
-            s1_vals = res["s1_vals"]
-            s2_vals = res["s2_vals"]
-            
-            # 1. Puntos Experimentales (Scatter 3D)
-            ax.scatter(s1_vals, s2_vals, res["y_data"], c='blue', marker='o', label='Experimental', s=40, depthshade=False)
-            
-            # 2. Superficie del Modelo
-            # Creamos una malla (grid) que cubra el rango de datos
-            s1_range = np.linspace(min(s1_vals), max(s1_vals), 30)
-            s2_range = np.linspace(min(s2_vals), max(s2_vals), 30)
-            S1_MESH, S2_MESH = np.meshgrid(s1_range, s2_range)
-            
-            # Calculamos la velocidad en cada punto de la malla
-            # Flatten para pasar al modelo y luego reshape para graficar
-            Z_MESH = funcion_modelo([S1_MESH.ravel(), S2_MESH.ravel()], *res["popt"])
-            Z_MESH = Z_MESH.reshape(S1_MESH.shape)
-            
-            # Graficamos la superficie con un mapa de color 'viridis'
-            ax.plot_surface(S1_MESH, S2_MESH, Z_MESH, cmap='viridis', alpha=0.6, edgecolor='none')
-            
-            # Etiquetas
-            ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
-            ax.set_ylabel(f"{res['s2_col']} ({unidad_s})")
-            ax.set_zlabel(f"Velocidad ({unidad_v})")
-            ax.set_title(f"Ajuste 3D - {nombre_modelo}", fontsize=10)
-            
-            # Ajuste de vista inicial
-            ax.view_init(elev=20, azim=45)
-            
-            st.pyplot(fig)
+        with col_res2:
+            # Lógica de graficado
+            if modalidad == "Un solo sustrato":
+                # GRÁFICO 2D (Estándar)
+                fig, ax = plt.subplots()
+                label_y = f"Velocidad ({unidad_v})"
+                
+                x_vals = res["x_data"]
+                ax.scatter(x_vals, res["y_data"], color='blue', label='Experimental', zorder=2)
+                
+                x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+                y_smooth = funcion_modelo(x_smooth, *res["popt"])
+                ax.plot(x_smooth, y_smooth, color='red', label='Modelo', linewidth=2, zorder=1)
+                ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+                ax.set_ylabel(label_y)
+                ax.legend()
+                ax.grid(True, linestyle='--', alpha=0.5)
+                st.pyplot(fig)
+                
+            else:
+                # GRÁFICO 3D (Multisustrato)
+                fig = plt.figure(figsize=(7, 6))
+                ax = fig.add_subplot(111, projection='3d')
+                
+                s1_vals = res["s1_vals"]
+                s2_vals = res["s2_vals"]
+                
+                # 1. Puntos Experimentales (Scatter 3D)
+                ax.scatter(s1_vals, s2_vals, res["y_data"], c='blue', marker='o', label='Experimental', s=40, depthshade=False)
+                
+                # 2. Superficie del Modelo
+                # Creamos una malla (grid) que cubra el rango de datos
+                s1_range = np.linspace(min(s1_vals), max(s1_vals), 30)
+                s2_range = np.linspace(min(s2_vals), max(s2_vals), 30)
+                S1_MESH, S2_MESH = np.meshgrid(s1_range, s2_range)
+                
+                # Calculamos la velocidad en cada punto de la malla
+                # Flatten para pasar al modelo y luego reshape para graficar
+                Z_MESH = funcion_modelo([S1_MESH.ravel(), S2_MESH.ravel()], *res["popt"])
+                Z_MESH = Z_MESH.reshape(S1_MESH.shape)
+                
+                # Graficamos la superficie con un mapa de color 'viridis'
+                ax.plot_surface(S1_MESH, S2_MESH, Z_MESH, cmap='viridis', alpha=0.6, edgecolor='none')
+                
+                # Etiquetas
+                ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+                ax.set_ylabel(f"{res['s2_col']} ({unidad_s})")
+                
+                # Corrección del título de eje Z (Padding para que no se oculte)
+                ax.set_zlabel(f"Velocidad ({unidad_v})", labelpad=10)
+                
+                ax.set_title(f"Ajuste 3D - {nombre_modelo}", fontsize=10)
+                
+                # Ajuste de vista inicial
+                ax.view_init(elev=20, azim=45)
+                
+                st.pyplot(fig)
 
-        # Botón de descarga común
-        buf = BytesIO()
-        fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
-        st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
+            # Botón de descarga común
+            buf = BytesIO()
+            fig.savefig(buf, format="png", dpi=300, bbox_inches='tight')
+            st.download_button("📷 Descargar Gráfica", buf.getvalue(), "grafica.png", "image/png")
