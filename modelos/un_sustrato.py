@@ -52,27 +52,3 @@ def michaelis_menten_y_lineal(S, Vmax, Km, k_ns):
     mm = (Vmax * S) / (Km + S)
     lineal = k_ns * S
     return mm + lineal
-
-def inhibicion_sustrato_parcial(S, Vmax, Km, Ki, beta):
-    r"""
-    v = \frac{V_{\max} S (1 + \frac{\beta S}{K_i})}{K_m + S (1 + \frac{S}{K_i})}
-    """
-    Ki_safe = np.where(Ki < 1e-6, 1e-6, Ki) # Evitar división por cero
-    
-    numerador = Vmax * S * (1 + (beta * S / Ki_safe))
-    denominador = Km + S * (1 + (S / Ki_safe))
-    
-    return numerador / denominador
-
-def mezcla_proteasas_doble_haldane(S, Vmax1, Km1, Ki1, Vmax2, Km2, Ki2):
-    r"""
-    v = \frac{V_{max1} S}{K_{m1} + S + S^2/K_{i1}} + \frac{V_{max2} S}{K_{m2} + S + S^2/K_{i2}}
-    """
-    # Prevenir división por cero en las constantes de inhibición
-    Ki1_safe = np.where(Ki1 < 1e-6, 1e-6, Ki1)
-    Ki2_safe = np.where(Ki2 < 1e-6, 1e-6, Ki2)
-
-    v1 = (Vmax1 * S) / (Km1 + S + (S**2 / Ki1_safe))
-    v2 = (Vmax2 * S) / (Km2 + S + (S**2 / Ki2_safe))
-    
-    return v1 + v2
