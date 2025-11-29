@@ -104,13 +104,11 @@ if col_s2_name:
     col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4f")
 
 # --- Session State Management and Data Persistence Fix ---
-current_col_names = {c: c for c in data_template_df.columns} # Dictionary of current names
-
 # Check for modal change (change in number of columns)
 is_modal_change = (st.session_state.modalidad_last != modalidad)
 
 # Almacenar los nombres de columnas de la última ejecución para mapeo
-old_col_names = st.session_state.col_names_last.get(st.session_state.modalidad_last, {})
+old_col_names_map = st.session_state.col_names_last.get(st.session_state.modalidad_last, {})
 
 # Si hay datos en la sesión, intentamos renombrarlos para que persistan.
 if not st.session_state.experimental_data.empty:
@@ -119,25 +117,25 @@ if not st.session_state.experimental_data.empty:
     # 1. Mapeo para renombrar
     rename_mapping = {}
     
-    # Identificar el mapeo de los tres tipos de columnas (V, S1, S2)
-    old_v_name = old_col_names.get('Velocidad') or [k for k, v in old_col_names.items() if v == 'Velocidad'] # Intentar obtener el nombre anterior de Velocidad
-    old_s1_name = old_col_names.get('Sustrato') or old_col_names.get('Sustrato 1')
-    old_s2_name = old_col_names.get('Variable 2') or old_col_names.get('Sustrato 2')
-    
-    # Mapear los nombres antiguos a los nuevos
+    # Obtener los nombres antiguos basados en el ROL fijo
+    old_v_name = old_col_names_map.get('v_col')
+    old_s1_name = old_col_names_map.get('s1_col')
+    old_s2_name = old_col_names_map.get('s2_col')
     
     # Mapeo de Velocidad
-    if old_v_name in session_data.columns and old_v_name != col_v_name:
+    if old_v_name and old_v_name in session_data.columns and old_v_name != col_v_name:
         rename_mapping[old_v_name] = col_v_name
         
     # Mapeo de Sustrato 1
-    if old_s1_name in session_data.columns and old_s1_name != col_s1_name:
+    if old_s1_name and old_s1_name in session_data.columns and old_s1_name != col_s1_name:
         rename_mapping[old_s1_name] = col_s1_name
         
-    # Mapeo de Sustrato 2 (solo si existe en la sesión anterior)
-    if col_s2_name and old_s2_name in session_data.columns and old_s2_name != col_s2_name:
-        rename_mapping[old_s2_name] = col_s2_name
-    
+    # Mapeo de Sustrato 2 (solo si existe)
+    if col_s2_name:
+        if old_s2_name and old_s2_name in session_data.columns and old_s2_name != col_s2_name:
+            rename_mapping[old_s2_name] = col_s2_name
+
+    # Apply renaming and reindex
     if rename_mapping:
         session_data.rename(columns=rename_mapping, inplace=True)
         # Asegurar que el DataFrame tiene las columnas correctas
@@ -153,9 +151,13 @@ else:
     st.session_state.experimental_data = data_template_df
 
 
-# Actualizar los nombres de columnas almacenados para la próxima ejecución
-st.session_state.col_names_last[modalidad] = {c: c for c in cols}
-st.session_state.modalidad_last = modality
+# Actualizar los nombres de columnas almacenados para la próxima ejecución (usando roles fijos)
+col_names_to_save = {'v_col': col_v_name, 's1_col': col_s1_name}
+if col_s2_name:
+    col_names_to_save['s2_col'] = col_s2_name
+
+st.session_state.col_names_last[modalidad] = col_names_to_save
+st.session_state.modalidad_last = modalidad
 
 
 c_editor, c_button = st.columns([5, 1])
