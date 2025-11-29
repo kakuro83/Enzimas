@@ -39,13 +39,12 @@ def get_models_from_module(module):
     return models
 
 # Función para generar el DataFrame inicial vacío
-def get_empty_data_df(col_s1_name, col_s2_name=None, num_rows=5):
+def get_empty_data_df(col_v_name, col_s1_name, col_s2_name=None, num_rows=5):
     if col_s2_name:
-        data = {"Velocidad": [None]*num_rows, col_s1_name: [None]*num_rows, col_s2_name: [None]*num_rows}
+        data = {col_v_name: [None]*num_rows, col_s1_name: [None]*num_rows, col_s2_name: [None]*num_rows}
     else:
-        data = {"Velocidad": [None]*num_rows, col_s1_name: [None]*num_rows}
+        data = {col_v_name: [None]*num_rows, col_s1_name: [None]*num_rows}
     return pd.DataFrame(data)
-
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Ajuste de Cinética Enzimática", layout="centered")
@@ -58,6 +57,8 @@ if 'experimental_data' not in st.session_state:
     st.session_state.experimental_data = pd.DataFrame()
 if 'modalidad_last' not in st.session_state:
     st.session_state.modalidad_last = ""
+if 'col_names_last' not in st.session_state:
+    st.session_state.col_names_last = {} # Para rastrear los nombres de las columnas
 
 # --- 1. SELECCIÓN DE MODALIDAD ---
 modalidad = st.selectbox(
@@ -73,49 +74,94 @@ st.subheader("Ingreso de Datos Experimentales")
 st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V). Los campos vacíos serán ignorados. Solo se aceptan valores numéricos.")
 
 # --- Define columns and template based on modality ---
-data_template = {}
+c_names = st.columns(3 if modalidad == "Un solo sustrato" else 3) 
+# Columna de Velocidad (Ahora editable)
+with c_names[0]:
+    col_v_name = st.text_input("Nombre Variable 0 (Velocidad):", value="Velocidad")
+# Columnas de Sustrato(s)
 if modalidad == "Un solo sustrato":
-    col_s1_name = st.text_input("Nombre de la columna de Sustrato:", value="Sustrato")
-    cols = ["Velocidad", col_s1_name]
+    with c_names[1]:
+        col_s1_name = st.text_input("Nombre de la columna de Sustrato:", value="Sustrato")
+    cols = [col_v_name, col_s1_name]
     col_s2_name = None 
 else:
-    c1, c2 = st.columns(2)
-    with c1: col_s1_name = st.text_input("Nombre Variable 1 (Sustrato principal):", value="Sustrato 1")
-    with c2: col_s2_name = st.text_input("Nombre Variable 2 (Sustrato/Inhibidor/Cofactor):", value="Variable 2")
-    cols = ["Velocidad", col_s1_name, col_s2_name]
+    with c_names[1]:
+        col_s1_name = st.text_input("Nombre Variable 1 (Sustrato principal):", value="Sustrato 1")
+    with c_names[2]:
+        col_s2_name = st.text_input("Nombre Variable 2 (Sustrato/Inhibidor/Cofactor):", value="Variable 2")
+    cols = [col_v_name, col_s1_name, col_s2_name]
 
+# Generar el DataFrame de plantilla según la modalidad
+data_template_df = get_empty_data_df(col_v_name, col_s1_name, col_s2_name)
 
 # --- Column Configuration to enforce number type ---
-# FIX 1: Eliminar required=True para quitar las pestañas rojas en celdas vacías
-# FIX 3: Cambiar el formato de notación científica a formato fijo con 4 decimales.
+# El formato "%.4f" mostrará 4 decimales, usando notación científica para números muy grandes o pequeños.
 col_config = {
-    "Velocidad": st.column_config.NumberColumn("Velocidad", format="%.4f")
+    col_v_name: st.column_config.NumberColumn(col_v_name, format="%.4f"),
+    col_s1_name: st.column_config.NumberColumn(col_s1_name, format="%.4f")
 }
-col_config[col_s1_name] = st.column_config.NumberColumn(col_s1_name, format="%.4f")
 if col_s2_name:
     col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4f")
 
-# Generar el DataFrame de plantilla según la modalidad
-data_template_df = get_empty_data_df(col_s1_name, col_s2_name)
+# --- Session State Management and Data Persistence Fix ---
+current_col_names = {c: c for c in data_template_df.columns} # Dictionary of current names
 
+# Check for modal change (change in number of columns)
+is_modal_change = (st.session_state.modalidad_last != modalidad)
 
-# --- Session State Management and Clear Button ---
+# Almacenar los nombres de columnas de la última ejecución para mapeo
+old_col_names = st.session_state.col_names_last.get(st.session_state.modalidad_last, {})
 
-# 1. Reset data if modality changes or if the experimental data structure is mismatched
-current_cols = set(data_template_df.columns)
-session_cols = set(st.session_state.experimental_data.columns)
-
-if st.session_state.modalidad_last != modalidad or current_cols != session_cols:
+# Si hay datos en la sesión, intentamos renombrarlos para que persistan.
+if not st.session_state.experimental_data.empty:
+    session_data = st.session_state.experimental_data.copy()
+    
+    # 1. Mapeo para renombrar
+    rename_mapping = {}
+    
+    # Identificar el mapeo de los tres tipos de columnas (V, S1, S2)
+    old_v_name = old_col_names.get('Velocidad') or [k for k, v in old_col_names.items() if v == 'Velocidad'] # Intentar obtener el nombre anterior de Velocidad
+    old_s1_name = old_col_names.get('Sustrato') or old_col_names.get('Sustrato 1')
+    old_s2_name = old_col_names.get('Variable 2') or old_col_names.get('Sustrato 2')
+    
+    # Mapear los nombres antiguos a los nuevos
+    
+    # Mapeo de Velocidad
+    if old_v_name in session_data.columns and old_v_name != col_v_name:
+        rename_mapping[old_v_name] = col_v_name
+        
+    # Mapeo de Sustrato 1
+    if old_s1_name in session_data.columns and old_s1_name != col_s1_name:
+        rename_mapping[old_s1_name] = col_s1_name
+        
+    # Mapeo de Sustrato 2 (solo si existe en la sesión anterior)
+    if col_s2_name and old_s2_name in session_data.columns and old_s2_name != col_s2_name:
+        rename_mapping[old_s2_name] = col_s2_name
+    
+    if rename_mapping:
+        session_data.rename(columns=rename_mapping, inplace=True)
+        # Asegurar que el DataFrame tiene las columnas correctas
+        session_data = session_data.reindex(columns=cols, fill_value=None)
+    
+    # 2. Resetear si la modalidad cambió fundamentalmente (diferente número de columnas)
+    if is_modal_change or len(session_data.columns) != len(cols):
+        st.session_state.experimental_data = data_template_df
+    else:
+        st.session_state.experimental_data = session_data # Persistir los datos renombrados
+else:
+    # Inicializar datos vacíos
     st.session_state.experimental_data = data_template_df
-    st.session_state.modalidad_last = modalidad
-elif st.session_state.experimental_data.empty:
-    st.session_state.experimental_data = data_template_df # Re-initialize if manually emptied
+
+
+# Actualizar los nombres de columnas almacenados para la próxima ejecución
+st.session_state.col_names_last[modalidad] = {c: c for c in cols}
+st.session_state.modalidad_last = modality
 
 
 c_editor, c_button = st.columns([5, 1])
 
 with c_button:
-    # FIX 2: Botón de Limpiar Datos
+    # Botón de Limpiar Datos
     if st.button("Limpiar Datos", key="clear_data_btn", use_container_width=True):
         st.session_state.experimental_data = data_template_df
         st.session_state.resultados = None # Limpiar resultados anteriores
@@ -137,10 +183,9 @@ st.session_state.experimental_data = df_edited
 # Limpieza y preparación de DataFrame final
 df = st.session_state.experimental_data.copy()
 df = df.dropna(how='all').copy()
-df = df.dropna(subset=["Velocidad"])
+df = df.dropna(subset=[col_v_name]) # Usar el nombre de velocidad dinámico
 for col in cols:
     if col in df.columns: 
-        # Aseguramos que los tipos sean numéricos para el cálculo
         df[col] = pd.to_numeric(df[col], errors='coerce') 
 df = df.dropna()
 
@@ -193,7 +238,7 @@ except ValueError:
 with st.expander("🛠️ Opciones Avanzadas: Valores Iniciales y Parámetros Fijos"):
     st.caption("Ajusta los valores iniciales o marca 'Fijar' para bloquear una constante.")
     param_settings = {}
-    v_max_guess = np.max(df["Velocidad"].values) if not df.empty else 1.0
+    v_max_guess = np.max(df[col_v_name].values) if not df.empty else 1.0 # Usar nombre de velocidad dinámico
 
     for p in param_names:
         c_lbl, c_val, c_fix = st.columns([1, 2, 1])
@@ -209,11 +254,7 @@ with st.expander("🛠️ Opciones Avanzadas: Valores Iniciales y Parámetros Fi
         with c_fix: fixed = st.checkbox("Fijar", key=f"f_{p}_{nombre_modelo_sel}")
         param_settings[p] = {"value": val, "fixed": fixed}
 
-# Estética
-st.markdown("##### Estética de Gráfica")
-c_u1, c_u2 = st.columns(2)
-with c_u1: unidad_v = st.text_input("Unidades Velocidad:", value="mM/min")
-with c_u2: unidad_s = st.text_input("Unidades Sustrato:", value="mM")
+# Estética - Se han eliminado los campos de unidades (unidad_v, unidad_s)
 
 # --- 4. EJECUCIÓN ---
 if st.button("Ejecutar ajuste de datos", type="primary"):
@@ -222,7 +263,7 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
     else:
         try:
             # Preparar datos X, Y
-            y_data = df["Velocidad"].values
+            y_data = df[col_v_name].values # Usar nombre de velocidad dinámico
             if modalidad == "Un solo sustrato": 
                 x_data = df[col_s1_name].values
             else: 
@@ -279,7 +320,9 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
                 "modalidad": modalidad, "model_name": nombre_modelo_sel,
                 "popt": popt_full, "r2": r2, "rmse": rmse, "mae": mae, "aic": aic,
                 "param_names": param_names, "x_data": x_data, "y_data": y_data,
-                "s1_col": col_s1_name, "s2_col": col_s2_name
+                "v_col": col_v_name, # Store dynamic velocity name
+                "s1_col": col_s1_name, 
+                "s2_col": col_s2_name
             }
             st.rerun()
 
@@ -328,8 +371,9 @@ if st.session_state.resultados:
             y_smooth = funcion_final(x_smooth, *res["popt"])
             
             ax.plot(x_smooth, y_smooth, c='red', lw=2, label='Modelo', zorder=1)
-            ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
-            ax.set_ylabel(f"Velocidad ({unidad_v})")
+            # Etiquetas de eje usan el nombre dinámico (se asume que incluye la unidad)
+            ax.set_xlabel(f"{res['s1_col']}")
+            ax.set_ylabel(f"{res['v_col']}")
             ax.legend()
             ax.grid(True, alpha=0.5, ls="--")
             st.pyplot(fig)
@@ -374,9 +418,10 @@ if st.session_state.resultados:
                 # 4. Configuración del Layout (Ejes y Reinicio)
                 fig.update_layout(
                     scene=dict(
-                        xaxis_title=f"{res['s1_col']} ({unidad_s})",
-                        yaxis_title=f"{res['s2_col']} ({unidad_s})",
-                        zaxis_title=f"Velocidad ({unidad_v})", # ¡Título del eje Z explícito!
+                        # Etiquetas de eje usan el nombre dinámico (se asume que incluye la unidad)
+                        xaxis_title=f"{res['s1_col']}",
+                        yaxis_title=f"{res['s2_col']}",
+                        zaxis_title=f"{res['v_col']}", 
                         aspectmode='auto'
                     ),
                     # Botón de Reinicio de Vista (Custom button)
