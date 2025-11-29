@@ -64,13 +64,13 @@ Escribir la función con numpy en el archivo correspondiente (ej. modelos/un_sus
 
 Documentar la Ecuación: Incluir la ecuación en formato LaTeX dentro de un raw string (r"""...""") como Docstring de la función. Solo la ecuación.
 
-2. Modelos Dinámicos (Clase ModeloCleland)
+2. Modelos Dinámicos (Clase Cleland)
 
 Para modelos como Adair o el Modelo Cleland Generalizado, donde el número de constantes depende de una variable (el orden $n$), debes crear una Clase que contenga un método obtener_funcion().
 
 Ejemplo de Modelo Cleland (en modelos/dos_sustratos.py):
 
-La clase se llama ModeloCleland en el código y aparece como Modelo Cleland (Dinámico) en la interfaz. Permite modelar interacciones complejas de doble variable mediante una estructura polinomial general.
+La clase se llama Cleland en el código y aparece como Cleland (Dinámico) en la interfaz. Permite modelar interacciones complejas de doble variable mediante una estructura polinomial general.
 
 Licencia: Este proyecto es de código abierto.
 
