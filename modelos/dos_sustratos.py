@@ -44,7 +44,7 @@ def inhibicion_mixta(X, Vmax, Km, Ki, Kip):
     return np.divide(numerador, denominador, out=np.zeros_like(numerador), where=denominador!=0)
     
 # --- CLASE DINÁMICA PARA MODELOS MULTISUSTRATO ---
-class ModeloCleland: # Renombrado a ModeloCleland
+class Cleland:
     """
     Clase para modelos de interacción polinomial con orden variable N (Tipo Cleland Generalizado).
     """
