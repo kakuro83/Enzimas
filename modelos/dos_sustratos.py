@@ -29,7 +29,7 @@ def hill_generalizado_mezcla(X, Vmax, Kh, n, beta):
 
 def inhibicion_mixta_s2_variable(X, Vmax, Km, Ki, alpha):
     r"""
-    v = \frac{V_{\max} S_1}{K_m \cdot (1 + \frac{S_2}{K_i \alpha}) + S_1 \cdot (1 + \frac{S_2}{K_i})}
+    v = \frac{V_{\max} S_1}{K_m \cdot (1 + \frac{I}{K_i \alpha}) + S_1 \cdot (1 + \frac{I}{K_i})}
     """
     # X debe ser una tupla o lista: [S1, S2]
     S1, S2 = X
