@@ -27,11 +27,6 @@ def hill_generalizado_mezcla(X, Vmax, Kh, n, beta):
     
     return numerador / denominador
 
-Asegúrate de agregar este código al final de tu archivo **`modelos/dos_sustratos.py`**. Tu aplicación `App.py` lo detectará automáticamente.
-
-```python
-import numpy as np
-
 def inhibicion_mixta_s2_variable(X, Vmax, Km, Ki, alpha):
     r"""
     Modelo de inhibición mixta donde $S_2$ actúa como inhibidor variable ($I$).
