@@ -44,9 +44,9 @@ def inhibicion_mixta(X, Vmax, Km, Ki, Kip):
     return np.divide(numerador, denominador, out=np.zeros_like(numerador), where=denominador!=0)
     
 # --- CLASE DINÁMICA PARA MODELOS MULTISUSTRATO ---
-class Modelo_Interaccion_General:
+class ModeloCleland: # Renombrado a ModeloCleland
     """
-    Clase para modelos de interacción polinomial con orden variable N.
+    Clase para modelos de interacción polinomial con orden variable N (Tipo Cleland Generalizado).
     """
     def __init__(self, n):
         self.n = int(n)
@@ -71,7 +71,7 @@ class Modelo_Interaccion_General:
         
         # 3. Generar la función Python ejecutable (que curve_fit entenderá)
         code = f"""
-def interaccion_generada({arg_str}):
+def cleland_generada({arg_str}): # Nombre de la función interna también actualizado
     import numpy as np
     S1, S2 = X
     
@@ -97,6 +97,6 @@ def interaccion_generada({arg_str}):
         # Ejecutar el código generado dinámicamente
         local_vars = {}
         exec(code, local_vars)
-        func = local_vars['interaccion_generada']
+        func = local_vars['cleland_generada']
         func.__doc__ = docstring
         return func
