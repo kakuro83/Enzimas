@@ -29,10 +29,10 @@ def get_models_from_module(module):
     # 2. Buscar Clases (Modelos dinámicos como Adair)
     for name, cls in inspect.getmembers(module, inspect.isclass):
         if cls.__module__ == module.__name__:
-            # Nos aseguramos de que la clase no sea una clase base interna de Python
-            if name not in ['Adair', 'Hill']: # Si usas clases base, agrégalas aquí para evitar conflictos
-                display_name = name.replace("_", " ").title() + " (Dinámico)"
-                models[display_name] = cls
+            # Eliminamos la lista de exclusión innecesaria. Cualquier clase definida en el módulo 
+            # es considerada un modelo dinámico (Ej. Adair) para ser listado.
+            display_name = name.replace("_", " ").title() + " (Dinámico)"
+            models[display_name] = cls
             
     return models
 
