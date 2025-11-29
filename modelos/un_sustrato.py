@@ -19,82 +19,24 @@ def hill(S, Vmax, K05, n):
     """
     return (Vmax * (S**n)) / (K05**n + S**n)
 
-# --- CLASE DINÁMICA ADAIR ---
-class Adair:
+def Adair(a, Vmax, K1, K2, K3, K4):
+    r"""
+    v = V_{\max} \cdot \frac{\frac{a}{K_1} + \frac{3a^2}{K_1 K_2} + \frac{3a^3}{K_1 K_2 K_3} + \frac{a^4}{K_1 K_2 K_3 K_4}}{1 + \frac{4a}{K_1} + \frac{6a^2}{K_1 K_2} + \frac{4a^3}{K_1 K_2 K_3} + \frac{a^4}{K_1 K_2 K_3 K_4}}
     """
-    Clase para el Modelo de Adair generalizado con n sitios de unión.
-    """
-    def __init__(self, n):
-        # n es el número de sitios de unión.
-        self.n = int(n)
+    # Términos individuales de la fracción (a / K...)
+    t1 = a / K1
+    t2 = (a**2) / (K1 * K2)
+    t3 = (a**3) / (K1 * K2 * K3)
+    t4 = (a**4) / (K1 * K2 * K3 * K4)
     
-    def obtener_funcion(self):
-        # 1. Definir nombres de los parámetros dinámicamente
-        # Los parámetros son Vmax, K1, K2, ..., Kn
-        args_names = ['S', 'Vmax'] + [f'K{i+1}' for i in range(self.n)]
-        arg_str = ", ".join(args_names)
-        
-        # 2. Construir la ecuación LaTeX (solo la fórmula)
-        # La ecuación es compleja debido a los productos secuenciales K1*K2...
-        
-        # Numerador: Sumatoria de i * beta_i * S^i
-        num_terms_latex = []
-        for i in range(1, self.n + 1):
-            k_product = " ".join([f"K_{j}" for j in range(1, i + 1)])
-            num_terms_latex.append(f"{i} ({k_product}) S^{i}")
-        
-        # Denominador: Sumatoria de 1 + beta_i * S^i
-        den_terms_latex = ["1"]
-        for i in range(1, self.n + 1):
-            k_product = " ".join([f"K_{j}" for j in range(1, i + 1)])
-            den_terms_latex.append(f"({k_product}) S^{i}")
-            
-        docstring = rf"v = \frac{{V_{{max}} \left( { ' + '.join(num_terms_latex) } \right)}}{{{self.n} \left( { ' + '.join(den_terms_latex) } \right)}}"
-        
-        # 3. Generar la función Python ejecutable
-        code = f"""
-def adair_generada({arg_str}):
-    import numpy as np
+    # Numerador según la imagen (Coeficientes: 1, 3, 3, 1)
+    numerador_y = t1 + (3 * t2) + (3 * t3) + t4
     
-    S = np.array(S)
+    # Denominador según la imagen (Coeficientes: 1, 4, 6, 4, 1)
+    denominador_y = 1 + (4 * t1) + (6 * t2) + (4 * t3) + t4
     
-    # Extraer los K's de los argumentos
-    # El slice [2:] toma los argumentos después de S y Vmax (i.e., K1, K2, ...)
-    params_k = list(locals().values())[2:] 
+    # Fracción de saturación (y)
+    y = np.divide(numerador_y, denominador_y, out=np.zeros_like(numerador_y), where=denominador_y != 0)
     
-    # Inicialización de Numerador y Denominador
-    numerador_sum = 0.0
-    denominador_sum = 1.0 # El '1' inicial del denominador
-    
-    # Coeficientes beta_i = K1 * K2 * ... * Ki
-    beta_i = 1.0 
-    
-    for i in range({self.n}):
-        K_i = params_k[i]
-        
-        # Calcular el producto secuencial de K's (beta_i)
-        beta_i *= K_i 
-        
-        # Termino: beta_i * S^(i+1)
-        term = beta_i * (S ** (i + 1))
-        
-        # Sumatoria del numerador: Sum( (i+1) * beta_i * S^(i+1) )
-        numerador_sum += (i + 1) * term
-        
-        # Sumatoria del denominador: Sum( beta_i * S^(i+1) )
-        denominador_sum += term
-        
-    # Ecuación final: Vmax * (Num / (n * Den))
-    denominador_final = {self.n} * denominador_sum
-
-    # Manejo de división por cero
-    return np.divide(Vmax * numerador_sum, denominador_final, 
-                     out=np.zeros_like(Vmax * numerador_sum), where=denominador_final != 0)
-
-"""
-        # Ejecutar el código generado dinámicamente
-        local_vars = {}
-        exec(code, local_vars)
-        func = local_vars['adair_generada']
-        func.__doc__ = docstring
-        return func
+    # Velocidad final
+    return Vmax * y
