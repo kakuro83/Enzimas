@@ -42,8 +42,13 @@ def get_models_from_module(module):
 st.set_page_config(page_title="Ajuste de Cinética Enzimática", layout="centered")
 st.title("Ajuste de Modelos Enzimáticos")
 
+# Inicializar estados de sesión
 if 'resultados' not in st.session_state:
     st.session_state.resultados = None
+if 'experimental_data' not in st.session_state:
+    st.session_state.experimental_data = pd.DataFrame()
+if 'modalidad_last' not in st.session_state:
+    st.session_state.modalidad_last = ""
 
 # --- 1. SELECCIÓN DE MODALIDAD ---
 modalidad = st.selectbox(
@@ -56,29 +61,68 @@ modalidad = st.selectbox(
 
 # --- 2. DATOS ---
 st.subheader("Ingreso de Datos Experimentales")
-st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V).")
+st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V). Los campos vacíos serán ignorados. Solo se aceptan valores numéricos.")
 
+# --- Define columns and template based on modality ---
 data_template = {}
 if modalidad == "Un solo sustrato":
     col_s1_name = st.text_input("Nombre de la columna de Sustrato:", value="Sustrato")
     cols = ["Velocidad", col_s1_name]
-    data_template = {"Velocidad": [None]*5, col_s1_name: [None]*5}
-    col_s2_name = None # Limpiamos la variable para un sustrato
+    # DataFrame inicial vacío
+    data_template_df = pd.DataFrame({"Velocidad": [None]*5, col_s1_name: [None]*5})
+    col_s2_name = None 
 else:
-    # Usamos S1 y S2 para ambas variables (ej. Sustrato y Cofactor/Inhibidor)
     c1, c2 = st.columns(2)
     with c1: col_s1_name = st.text_input("Nombre Variable 1 (Sustrato principal):", value="Sustrato 1")
     with c2: col_s2_name = st.text_input("Nombre Variable 2 (Sustrato/Inhibidor/Cofactor):", value="Variable 2")
     cols = ["Velocidad", col_s1_name, col_s2_name]
-    data_template = {"Velocidad": [None]*5, col_s1_name: [None]*5, col_s2_name: [None]*5}
+    data_template_df = pd.DataFrame({"Velocidad": [None]*5, col_s1_name: [None]*5, col_s2_name: [None]*5})
 
-df_edited = st.data_editor(pd.DataFrame(data_template), num_rows="dynamic", use_container_width=True)
+# --- Column Configuration to enforce number type ---
+col_config = {
+    "Velocidad": st.column_config.NumberColumn("Velocidad", format="%.4e", required=True)
+}
+col_config[col_s1_name] = st.column_config.NumberColumn(col_s1_name, format="%.4e", required=True)
+if col_s2_name:
+    col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4e", required=True)
 
-# Limpieza y preparación de DataFrame
-df = df_edited.dropna(how='all').copy()
+# --- Session State Management and Clear Button ---
+
+# 1. Reset data if modality changes
+if st.session_state.modalidad_last != modalidad:
+    st.session_state.experimental_data = data_template_df
+    st.session_state.modalidad_last = modalidad
+elif st.session_state.experimental_data.empty:
+    st.session_state.experimental_data = data_template_df # Re-initialize if manually emptied
+
+c_editor, c_button = st.columns([5, 1])
+
+with c_button:
+    # Button to clear data
+    if st.button("Limpiar Datos", key="clear_data_btn", use_container_width=True):
+        st.session_state.experimental_data = data_template_df # Reset data to initial empty state
+        st.rerun()
+
+with c_editor:
+    df_edited = st.data_editor(
+        st.session_state.experimental_data,
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config=col_config,
+        key="data_input_editor" # Key is important for state management
+    )
+
+# Update session state with the edited data
+st.session_state.experimental_data = pd.DataFrame(st.session_state.data_input_editor)
+
+# Limpieza y preparación de DataFrame final
+df = st.session_state.experimental_data.copy()
+df = df.dropna(how='all').copy()
 df = df.dropna(subset=["Velocidad"])
 for col in cols:
-    if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+    if col in df.columns: 
+        # Aseguramos que los tipos sean numéricos para el cálculo
+        df[col] = pd.to_numeric(df[col], errors='coerce') 
 df = df.dropna()
 
 # --- 3. SELECCIÓN DE MODELO ---
