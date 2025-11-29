@@ -112,8 +112,9 @@ with c_editor:
         key="data_input_editor" # Key is important for state management
     )
 
-# Update session state with the edited data
-st.session_state.experimental_data = pd.DataFrame(st.session_state.data_input_editor)
+# FIX: Usar la salida directa df_edited, que es un DataFrame válido, para actualizar la sesión.
+# Esto evita el ValueError al intentar reconstruir el DataFrame desde la representación interna.
+st.session_state.experimental_data = df_edited
 
 # Limpieza y preparación de DataFrame final
 df = st.session_state.experimental_data.copy()
