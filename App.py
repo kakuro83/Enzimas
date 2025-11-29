@@ -87,12 +87,13 @@ else:
 
 # --- Column Configuration to enforce number type ---
 # FIX 1: Eliminar required=True para quitar las pestañas rojas en celdas vacías
+# FIX 3: Cambiar el formato de notación científica a formato fijo con 4 decimales.
 col_config = {
-    "Velocidad": st.column_config.NumberColumn("Velocidad", format="%.4e")
+    "Velocidad": st.column_config.NumberColumn("Velocidad", format="%.4f")
 }
-col_config[col_s1_name] = st.column_config.NumberColumn(col_s1_name, format="%.4e")
+col_config[col_s1_name] = st.column_config.NumberColumn(col_s1_name, format="%.4f")
 if col_s2_name:
-    col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4e")
+    col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4f")
 
 # Generar el DataFrame de plantilla según la modalidad
 data_template_df = get_empty_data_df(col_s1_name, col_s2_name)
