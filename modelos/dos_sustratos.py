@@ -43,23 +43,6 @@ def inhibicion_mixta(X, Vmax, Km, Ki, Kip):
     
     return np.divide(numerador, denominador, out=np.zeros_like(numerador), where=denominador!=0)
     
-def hill_mezcla_general(X, Vmax, K_S1, n, K_S2):
-    r"""
-    v = \frac{V_{\max} \cdot S_1^n}{K_{S1}^n + S_1^n + K_{S2} \cdot S_2^n}
-    """
-    S_1, S_2 = X
-    
-    # Manejo de potencias
-    S1_n = S_1**n
-    S2_n = S_2**n
-    K_S1_n = K_S1**n
-    
-    numerador = Vmax * S1_n
-    denominador = K_S1_n + S1_n + K_S2 * S2_n
-    
-    # Manejo de división por cero
-    return np.divide(numerador, denominador, out=np.zeros_like(numerador), where=denominador!=0)
-
 # --- CLASE DINÁMICA PARA MODELOS MULTISUSTRATO ---
 class Modelo_Interaccion_General:
     """
