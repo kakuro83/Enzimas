@@ -37,7 +37,7 @@ def adair_simplificado(S, Vmax, a, b, c, d):
     # Velocidad final
     return np.divide(Vmax * numerador, denominador, out=np.zeros_like(numerador), where=denominador != 0)
 
-def isoenzimas_MM(S, Vmax1, Km1, Vmax2, Km2):
+def isoenzimas_michaelis_menten(S, Vmax1, Km1, Vmax2, Km2):
     r"""
     v = \frac{V_{max1} S}{K_{m1} + S} + \frac{V_{max2} S}{K_{m2} + S}
     """
@@ -45,7 +45,7 @@ def isoenzimas_MM(S, Vmax1, Km1, Vmax2, Km2):
     mm2 = (Vmax2 * S) / (Km2 + S)
     return mm1 + mm2
 
-def MML(S, Vmax, Km, k_ns):
+def michaelis_menten_y_lineal(S, Vmax, Km, k_ns):
     r"""
     v = \frac{V_{max} S}{K_m + S} + k_{ns} S
     """
