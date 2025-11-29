@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+# Importación para gráficos 3D (aunque se carga implícitamente, es buena práctica)
+from mpl_toolkits.mplot3d import Axes3D 
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from io import BytesIO
@@ -249,10 +251,11 @@ if st.session_state.resultados:
             st.dataframe(df_s, hide_index=True, use_container_width=True, 
                          column_config={"Estadístico": st.column_config.TextColumn("Métrica", help=help_txt)})
         
-        # Gráfico solo si es Un solo sustrato
+        st.divider()
+        st.markdown("### Visualización Gráfica")
+
         if modalidad == "Un solo sustrato":
-            st.divider()
-            st.markdown("### Visualización Gráfica")
+            # --- GRÁFICO 2D ---
             fig, ax = plt.subplots(figsize=(8, 5))
             
             x_vals = res["x_data"]
@@ -271,3 +274,46 @@ if st.session_state.resultados:
             img = BytesIO()
             fig.savefig(img, format='png', dpi=300, bbox_inches='tight')
             st.download_button("📷 Descargar Gráfica", img.getvalue(), "plot.png", "image/png")
+            
+        else:
+            # --- GRÁFICO 3D (Dos sustratos / Doble Variable) ---
+            st.markdown("#### Superficie de Respuesta (3D)")
+            
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+
+            # 1. Preparar el rango de datos para la superficie (mesh)
+            s1_exp = res["x_data"][0]
+            s2_exp = res["x_data"][1]
+            v_exp = res["y_data"]
+
+            s1_line = np.linspace(s1_exp.min(), s1_exp.max(), 50)
+            s2_line = np.linspace(s2_exp.min(), s2_exp.max(), 50)
+            S1_MESH, S2_MESH = np.meshgrid(s1_line, s2_line)
+
+            # 2. Calcular la superficie del modelo ajustado
+            X_MESH = [S1_MESH.ravel(), S2_MESH.ravel()]
+            
+            # La función final (funcion_final) está disponible si el check de consistencia pasó
+            try:
+                Z_MESH = funcion_final(X_MESH, *res["popt"])
+                Z_MESH = Z_MESH.reshape(S1_MESH.shape)
+                
+                # 3. Plotting
+                ax.plot_surface(S1_MESH, S2_MESH, Z_MESH, cmap='viridis', alpha=0.6)
+                ax.scatter(s1_exp, s2_exp, v_exp, c='red', s=50, label='Experimental', depthshade=True)
+
+                # 4. Labels
+                ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
+                ax.set_ylabel(f"{res['s2_col']} ({unidad_s})")
+                ax.set_zlabel(f"Velocidad ({unidad_v})", labelpad=10)
+                
+                st.pyplot(fig)
+                
+                # 5. Download button
+                img = BytesIO()
+                fig.savefig(img, format='png', dpi=300, bbox_inches='tight')
+                st.download_button("📷 Descargar Gráfica 3D", img.getvalue(), "plot_3D.png", "image/png")
+
+            except Exception as e:
+                st.error(f"Error al generar la gráfica 3D. Puede ser que el modelo sea muy complejo o los datos sean insuficientes para el rango. Detalle: {e}")
