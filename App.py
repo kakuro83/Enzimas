@@ -77,18 +77,18 @@ st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl
 c_names = st.columns(3 if modalidad == "Un solo sustrato" else 3) 
 # Columna de Velocidad (Ahora editable)
 with c_names[0]:
-    col_v_name = st.text_input("Nombre Variable 0 (Velocidad):", value="Velocidad")
+    col_v_name = st.text_input("Etiqueta Velocidad:", value="Velocidad") # Etiqueta cambiada
 # Columnas de Sustrato(s)
 if modalidad == "Un solo sustrato":
     with c_names[1]:
-        col_s1_name = st.text_input("Nombre de la columna de Sustrato:", value="Sustrato")
+        col_s1_name = st.text_input("Etiqueta Sustrato:", value="Sustrato") # Etiqueta cambiada
     cols = [col_v_name, col_s1_name]
     col_s2_name = None 
 else:
     with c_names[1]:
-        col_s1_name = st.text_input("Nombre Variable 1 (Sustrato principal):", value="Sustrato 1")
+        col_s1_name = st.text_input("Etiqueta Sustrato principal:", value="Sustrato 1") # Etiqueta cambiada
     with c_names[2]:
-        col_s2_name = st.text_input("Nombre Variable 2 (Sustrato/Inhibidor/Cofactor):", value="Variable 2")
+        col_s2_name = st.text_input("Etiqueta Sustrato/Inhibidor/Cofactor:", value="Variable 2") # Etiqueta cambiada
     cols = [col_v_name, col_s1_name, col_s2_name]
 
 # Generar el DataFrame de plantilla según la modalidad
