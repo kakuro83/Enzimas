@@ -61,7 +61,7 @@ def hill_mezcla_general(X, Vmax, K_S1, n, K_S2):
     return np.divide(numerador, denominador, out=np.zeros_like(numerador), where=denominador!=0)
 
 # --- CLASE DINÁMICA PARA MODELOS MULTISUSTRATO ---
-class ModeloInteraccionGeneral:
+class Modelo_Interaccion_General:
     """
     Clase para modelos de interacción polinomial con orden variable N.
     """
