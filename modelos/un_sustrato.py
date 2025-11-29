@@ -52,3 +52,21 @@ def michaelis_menten_y_lineal(S, Vmax, Km, k_ns):
     mm = (Vmax * S) / (Km + S)
     lineal = k_ns * S
     return mm + lineal
+
+def inhibicion_sustrato_parcial(S, Vmax, Km, Ki, beta):
+    r"""
+    Modelo de inhibición por sustrato parcial (común en proteasas).
+    El complejo ESS puede formar producto pero a una velocidad diferente (beta * Vmax).
+    
+    v = \frac{V_{\max} S (1 + \frac{\beta S}{K_i})}{K_m + S (1 + \frac{S}{K_i})}
+    
+    - Si beta = 0: Se reduce al modelo de Haldane (Inhibición total).
+    - Si beta > 1: Activación por sustrato.
+    - Si 0 < beta < 1: Inhibición parcial.
+    """
+    Ki_safe = np.where(Ki < 1e-6, 1e-6, Ki) # Evitar división por cero
+    
+    numerador = Vmax * S * (1 + (beta * S / Ki_safe))
+    denominador = Km + S * (1 + (S / Ki_safe))
+    
+    return numerador / denominador
