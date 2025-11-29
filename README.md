@@ -1,18 +1,17 @@
-# 🧪 Aplicación de Ajuste de Cinética Enzimática (Enzimas App)
+🧪 Aplicación de Ajuste de Cinética Enzimática (Enzimas App)
 
-Esta aplicación web gratuita, construida con Python y Streamlit, permite a estudiantes e investigadores realizar ajustes de regresión no lineal de datos cinéticos experimentales a modelos enzimáticos comunes (Michaelis-Menten, Haldane, Hill, Adair, etc.) y avanzados (multisustrato).
+Esta aplicación web gratuita, construida con Python y Streamlit, permite a estudiantes e investigadores realizar ajustes de regresión no lineal de datos cinéticos experimentales a modelos enzimáticos comunes (Michaelis-Menten, Haldane, Hill, Adair, etc.) y avanzados (multisustrato/inhibición).
 
-La principal ventaja de esta aplicación es su **diseño modular**, que permite agregar nuevos modelos cinéticos (tanto simples como de orden variable) sin modificar el código principal (`App.py`).
+La principal ventaja de esta aplicación es su diseño modular, que permite agregar nuevos modelos cinéticos (tanto simples como de orden variable) sin modificar el código principal (App.py).
 
-## 🚀 Despliegue y Uso
+🚀 Despliegue y Uso
 
-Esta aplicación está diseñada para ser desplegada gratuitamente en **Streamlit Community Cloud**.
+Esta aplicación está diseñada para ser desplegada gratuitamente en Streamlit Community Cloud.
 
-### Requisitos Técnicos
+Requisitos Técnicos
 
-El archivo `requirements.txt` ya incluye todas las librerías necesarias:
+El archivo requirements.txt ya incluye todas las librerías necesarias:
 
-```
 streamlit
 pandas
 numpy
@@ -20,64 +19,59 @@ scipy
 matplotlib
 openpyxl
 scikit-learn
-```
+plotly
 
-### Flujo de Trabajo
 
-1.  **Selección de Modalidad:** Elige si tus datos son de **Un solo Sustrato**, **Mezcla**, o **Dos Sustratos**. Esto define la estructura de la tabla de entrada.
+Flujo de Trabajo
 
-2.  **Ingreso de Datos:** Copia y pega tus datos de **Velocidad** (columna fija) y **Sustrato(s)** directamente desde Excel/CSV a la tabla de datos.
+Selección de Modalidad: Elige una de las dos modalidades: Un solo Sustrato o Doble Variable (Dos Sustratos / Inhibidores).
 
-3.  **Selección de Modelo:** Elige el modelo a ajustar (ej. Michaelis-Menten). Si eliges un modelo dinámico (como **Adair**), se te pedirá seleccionar el orden.
+Etiquetas de Datos: Antes de pegar, define la etiqueta (nombre y unidad) para cada columna (ejemplo: Velocidad (μM/min)).
 
-4.  **Configuración Avanzada (Opcional):** Usa la sección de opciones avanzadas para:
+Ingreso de Datos: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V).
 
-      * Ajustar los valores iniciales de la regresión.
+Selección de Modelo: Elige el modelo a ajustar. Si seleccionas Modelo Cleland (Dinámico), establece el orden de la interacción.
 
-      * **Fijar** constantes específicas (ej. un coeficiente de Hill, o la concentración inicial de un inhibidor) para que el algoritmo solo ajuste las constantes libres.
+Configuración Avanzada (Opcional):
 
-5.  **Ejecutar Ajuste:** Presiona el botón para obtener los resultados.
+Ajusta los valores iniciales de la regresión.
 
-6.  **Análisis de Resultados:**
+Fijar constantes específicas (ej. un coeficiente de Hill, o la concentración de un inhibidor) para que el algoritmo no las ajuste.
 
-      * Obtén los valores ajustados de las constantes cinéticas.
+Ejecutar Ajuste: Presiona el botón para obtener los resultados.
 
-      * Evalúa la **Bondad de Ajuste** con métricas clave (R², RMSE, MAE, AIC).
+Análisis de Resultados:
 
-      * Para modelos de un sustrato, visualiza la **Gráfica** de los puntos experimentales vs. la curva ajustada.
+Obtén los valores ajustados de las constantes cinéticas.
 
-      * Descarga la tabla de parámetros y la gráfica en formato PNG/CSV.
+Evalúa la Bondad de Ajuste con métricas clave (R², RMSE, MAE, AIC).
 
-## ⚙️ Estructura Modular (Para Desarrolladores)
+Gráficos:
 
-El código está organizado para facilitar la adición de nuevos modelos sin tocar `App.py`.
+Un solo Sustrato: Gráfica 2D de ajuste de curva.
 
-### 1\. Modelos con Funciones Simples (`.py`)
+Doble Variable: Gráfica 3D de Superficie de Respuesta (interactiva con el mouse).
+
+⚙️ Estructura Modular (Para Desarrolladores)
+
+El código está organizado para facilitar la adición de nuevos modelos sin tocar App.py.
+
+1. Modelos con Funciones Simples (.py)
 
 Para agregar un modelo con una ecuación fija (ej. Inhibición No Competitiva), solo necesitas:
 
-1.  **Escribir la función** con `numpy` en el archivo correspondiente (ej. `modelos/un_sustrato.py`).
+Escribir la función con numpy en el archivo correspondiente (ej. modelos/un_sustrato.py).
 
-2.  **Documentar la Ecuación:** Incluir la ecuación en formato **LaTeX** dentro de un *raw string* (`r"""..."""`) como Docstring de la función.
+Documentar la Ecuación: Incluir la ecuación en formato LaTeX dentro de un raw string (r"""...""") como Docstring de la función. Solo la ecuación.
 
-**Ejemplo:**
+2. Modelos Dinámicos (Clase ModeloCleland)
 
-```python
-def mi_nuevo_modelo(S, Vmax, Km, Kx):
-    r"""
-    V = \frac{V_{\max} S}{K_m + S + \frac{S^2}{K_x}}
-    """
-    return (Vmax * S) / (Km + S + (S**2 / Kx))
-```
+Para modelos como Adair o el Modelo Cleland Generalizado, donde el número de constantes depende de una variable (el orden $n$), debes crear una Clase que contenga un método obtener_funcion().
 
-El `App.py` detectará automáticamente el nombre de la función (`Mi Nuevo Modelo`) y sus parámetros (`Vmax`, `Km`, `Kx`).
+Ejemplo de Modelo Cleland (en modelos/dos_sustratos.py):
 
-### 2\. Modelos de Orden Variable (Clases Dinámicas)
+La clase se llama ModeloCleland en el código y aparece como Modelo Cleland (Dinámico) en la interfaz. Permite modelar interacciones complejas de doble variable mediante una estructura polinomial general.
 
-Para modelos como **Adair** donde el número de constantes depende de una variable (el orden $n$), debes crear una **Clase** que contenga un método `obtener_funcion()`.
+Licencia: Este proyecto es de código abierto.
 
-El programa `App.py` detectará la clase y te preguntará el orden `n` antes de construir la función matemática final con el número correcto de constantes.
-
-**Licencia:** Este proyecto es de código abierto.
-
-**Autor:** Gerardo Andrés Caicedo Pineda
+Autor: Gerardo Caicedo
