@@ -29,22 +29,7 @@ def hill_generalizado_mezcla(X, Vmax, Kh, n, beta):
 
 def inhibicion_mixta_s2_variable(X, Vmax, Km, Ki, alpha):
     r"""
-    Modelo de inhibición mixta donde $S_2$ actúa como inhibidor variable ($I$).
-    
     v = \frac{V_{\max} S_1}{K_m \cdot (1 + \frac{S_2}{K_i \alpha}) + S_1 \cdot (1 + \frac{S_2}{K_i})}
-    
-    Donde:
-    - $S_1$ es el Sustrato.
-    - $S_2$ es el Inhibidor ($I$).
-    - $V_{\max}$ es la velocidad máxima aparente.
-    - $K_m$ es la constante de Michaelis.
-    - $K_i$ es la constante de disociación del inhibidor al complejo ES.
-    - $\alpha$ (alpha) es el factor de competitividad ($\alpha \ge 0$).
-    
-    Casos especiales:
-    - Si $\alpha = 0$: Inhibición acompetitiva pura.
-    - Si $\alpha = 1$: Inhibición no competitiva pura.
-    - Si $\alpha = \infty$ (valor grande y fijo): Inhibición competitiva pura.
     """
     # X debe ser una tupla o lista: [S1, S2]
     S1, S2 = X
