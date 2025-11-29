@@ -27,7 +27,7 @@ def hill_generalizado_mezcla(X, Vmax, Kh, n, beta):
     
     return numerador / denominador
 
-def inhibicion_mixta_s2_variable(X, Vmax, Km, Ki, alpha):
+def inhibicion_mixta(X, Vmax, Km, Ki, Kip):
     r"""
     v = \frac{V_{\max} S_1}{K_m \cdot (1 + \frac{I}{K_i \alpha}) + S_1 \cdot (1 + \frac{I}{K_i})}
     """
