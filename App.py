@@ -38,6 +38,15 @@ def get_models_from_module(module):
             
     return models
 
+# Función para generar el DataFrame inicial vacío
+def get_empty_data_df(col_s1_name, col_s2_name=None, num_rows=5):
+    if col_s2_name:
+        data = {"Velocidad": [None]*num_rows, col_s1_name: [None]*num_rows, col_s2_name: [None]*num_rows}
+    else:
+        data = {"Velocidad": [None]*num_rows, col_s1_name: [None]*num_rows}
+    return pd.DataFrame(data)
+
+
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Ajuste de Cinética Enzimática", layout="centered")
 st.title("Ajuste de Modelos Enzimáticos")
@@ -68,39 +77,47 @@ data_template = {}
 if modalidad == "Un solo sustrato":
     col_s1_name = st.text_input("Nombre de la columna de Sustrato:", value="Sustrato")
     cols = ["Velocidad", col_s1_name]
-    # DataFrame inicial vacío
-    data_template_df = pd.DataFrame({"Velocidad": [None]*5, col_s1_name: [None]*5})
     col_s2_name = None 
 else:
     c1, c2 = st.columns(2)
     with c1: col_s1_name = st.text_input("Nombre Variable 1 (Sustrato principal):", value="Sustrato 1")
     with c2: col_s2_name = st.text_input("Nombre Variable 2 (Sustrato/Inhibidor/Cofactor):", value="Variable 2")
     cols = ["Velocidad", col_s1_name, col_s2_name]
-    data_template_df = pd.DataFrame({"Velocidad": [None]*5, col_s1_name: [None]*5, col_s2_name: [None]*5})
+
 
 # --- Column Configuration to enforce number type ---
+# FIX 1: Eliminar required=True para quitar las pestañas rojas en celdas vacías
 col_config = {
-    "Velocidad": st.column_config.NumberColumn("Velocidad", format="%.4e", required=True)
+    "Velocidad": st.column_config.NumberColumn("Velocidad", format="%.4e")
 }
-col_config[col_s1_name] = st.column_config.NumberColumn(col_s1_name, format="%.4e", required=True)
+col_config[col_s1_name] = st.column_config.NumberColumn(col_s1_name, format="%.4e")
 if col_s2_name:
-    col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4e", required=True)
+    col_config[col_s2_name] = st.column_config.NumberColumn(col_s2_name, format="%.4e")
+
+# Generar el DataFrame de plantilla según la modalidad
+data_template_df = get_empty_data_df(col_s1_name, col_s2_name)
+
 
 # --- Session State Management and Clear Button ---
 
-# 1. Reset data if modality changes
-if st.session_state.modalidad_last != modalidad:
+# 1. Reset data if modality changes or if the experimental data structure is mismatched
+current_cols = set(data_template_df.columns)
+session_cols = set(st.session_state.experimental_data.columns)
+
+if st.session_state.modalidad_last != modalidad or current_cols != session_cols:
     st.session_state.experimental_data = data_template_df
     st.session_state.modalidad_last = modalidad
 elif st.session_state.experimental_data.empty:
     st.session_state.experimental_data = data_template_df # Re-initialize if manually emptied
 
+
 c_editor, c_button = st.columns([5, 1])
 
 with c_button:
-    # Button to clear data
+    # FIX 2: Botón de Limpiar Datos
     if st.button("Limpiar Datos", key="clear_data_btn", use_container_width=True):
-        st.session_state.experimental_data = data_template_df # Reset data to initial empty state
+        st.session_state.experimental_data = data_template_df
+        st.session_state.resultados = None # Limpiar resultados anteriores
         st.rerun()
 
 with c_editor:
@@ -112,9 +129,9 @@ with c_editor:
         key="data_input_editor" # Key is important for state management
     )
 
-# FIX: Usar la salida directa df_edited, que es un DataFrame válido, para actualizar la sesión.
-# Esto evita el ValueError al intentar reconstruir el DataFrame desde la representación interna.
+# Actualizar el estado con los datos editados
 st.session_state.experimental_data = df_edited
+
 
 # Limpieza y preparación de DataFrame final
 df = st.session_state.experimental_data.copy()
