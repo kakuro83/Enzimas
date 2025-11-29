@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-# Importación para gráficos 3D (aunque se carga implícitamente, es buena práctica)
 from mpl_toolkits.mplot3d import Axes3D 
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 from io import BytesIO
 import inspect
+import plotly.graph_objects as go # Importamos Plotly para gráficos 3D interactivos
 
 # --- IMPORTACIÓN DE MÓDULOS ---
 # Importamos solo los dos módulos que quedan
@@ -255,7 +255,7 @@ if st.session_state.resultados:
         st.markdown("### Visualización Gráfica")
 
         if modalidad == "Un solo sustrato":
-            # --- GRÁFICO 2D ---
+            # --- GRÁFICO 2D (MATPLOTLIB) ---
             fig, ax = plt.subplots(figsize=(8, 5))
             
             x_vals = res["x_data"]
@@ -276,12 +276,9 @@ if st.session_state.resultados:
             st.download_button("📷 Descargar Gráfica", img.getvalue(), "plot.png", "image/png")
             
         else:
-            # --- GRÁFICO 3D (Dos sustratos / Doble Variable) ---
-            st.markdown("#### Superficie de Respuesta (3D)")
+            # --- GRÁFICO 3D INTERACTIVO (PLOTLY) ---
+            st.markdown("#### Superficie de Respuesta (3D) - Interactivo")
             
-            fig = plt.figure(figsize=(10, 8))
-            ax = fig.add_subplot(111, projection='3d')
-
             # 1. Preparar el rango de datos para la superficie (mesh)
             s1_exp = res["x_data"][0]
             s2_exp = res["x_data"][1]
@@ -294,26 +291,52 @@ if st.session_state.resultados:
             # 2. Calcular la superficie del modelo ajustado
             X_MESH = [S1_MESH.ravel(), S2_MESH.ravel()]
             
-            # La función final (funcion_final) está disponible si el check de consistencia pasó
             try:
                 Z_MESH = funcion_final(X_MESH, *res["popt"])
                 Z_MESH = Z_MESH.reshape(S1_MESH.shape)
                 
-                # 3. Plotting
-                ax.plot_surface(S1_MESH, S2_MESH, Z_MESH, cmap='viridis', alpha=0.6)
-                ax.scatter(s1_exp, s2_exp, v_exp, c='red', s=50, label='Experimental', depthshade=True)
+                # 3. Construir la figura de Plotly
+                fig = go.Figure(data=[
+                    # Superficie del Modelo Ajustado
+                    go.Surface(z=Z_MESH, x=S1_MESH, y=S2_MESH, 
+                               colorscale='Viridis', opacity=0.8, showscale=False,
+                               name='Modelo Ajustado'),
+                    
+                    # Puntos Experimentales
+                    go.Scatter3d(x=s1_exp, y=s2_exp, z=v_exp, 
+                                 mode='markers', marker=dict(size=5, color='red', opacity=1.0),
+                                 name='Datos Experimentales')
+                ])
 
-                # 4. Labels
-                ax.set_xlabel(f"{res['s1_col']} ({unidad_s})")
-                ax.set_ylabel(f"{res['s2_col']} ({unidad_s})")
-                ax.set_zlabel(f"Velocidad ({unidad_v})", labelpad=10)
+                # 4. Configuración del Layout (Ejes y Reinicio)
+                fig.update_layout(
+                    scene=dict(
+                        xaxis_title=f"{res['s1_col']} ({unidad_s})",
+                        yaxis_title=f"{res['s2_col']} ({unidad_s})",
+                        zaxis_title=f"Velocidad ({unidad_v})", # ¡Título del eje Z explícito!
+                        aspectmode='auto'
+                    ),
+                    # Botón de Reinicio de Vista (Custom button)
+                    updatemenus=[dict(
+                        type="buttons",
+                        direction="left",
+                        showactive=True,
+                        buttons=[dict(
+                            label="Reiniciar Vista",
+                            method="relayout",
+                            # Posición estándar de la cámara para la vista inicial
+                            args=[{"scene.camera.up": {'x': 0, 'y': 0, 'z': 1}, 
+                                   "scene.camera.center": {'x': 0, 'y': 0, 'z': 0}, 
+                                   "scene.camera.eye": {'x': 1.25, 'y': 1.25, 'z': 1.25}}],
+                        )]
+                    )]
+                )
                 
-                st.pyplot(fig)
+                # Renderiza el gráfico interactivo
+                st.plotly_chart(fig, use_container_width=True) 
                 
-                # 5. Download button
-                img = BytesIO()
-                fig.savefig(img, format='png', dpi=300, bbox_inches='tight')
-                st.download_button("📷 Descargar Gráfica 3D", img.getvalue(), "plot_3D.png", "image/png")
+                # Nota: Plotly tiene su propio botón de descarga (cámara en la esquina superior derecha)
+                st.info("El gráfico 3D es interactivo (clic y arrastrar para girar). Usa el icono de la cámara para descargar.")
 
             except Exception as e:
-                st.error(f"Error al generar la gráfica 3D. Puede ser que el modelo sea muy complejo o los datos sean insuficientes para el rango. Detalle: {e}")
+                st.error(f"Error al generar la gráfica 3D. El modelo puede ser muy complejo o los datos insuficientes para el rango. Detalle: {e}")
