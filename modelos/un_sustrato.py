@@ -54,10 +54,7 @@ def michaelis_menten_y_lineal(S, Vmax, Km, k_ns):
     return mm + lineal
 
 def bifasica_dos_sitios_hill(S, Vmax1, K1, n1, Vmax2, K2, n2):
-    r"""
-    Modelo Bifásico (Doble Hill) para curvas con dos fases de crecimiento ('dos jorobas').
-    Representa dos poblaciones de enzimas o sitios con afinidades muy distintas.
-    
+    r"""  
     v = \frac{V_{max1} S^{n1}}{K_{1}^{n1} + S^{n1}} + \frac{V_{max2} S^{n2}}{K_{2}^{n2} + S^{n2}}
     """
     # Término 1 (Primera fase/joroba)
