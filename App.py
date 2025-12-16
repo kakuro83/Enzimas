@@ -51,6 +51,9 @@ if 'modalidad_last' not in st.session_state:
     st.session_state.modalidad_last = ""
 if 'col_names_last' not in st.session_state:
     st.session_state.col_names_last = {} 
+# Inicializar llave dinámica para el editor
+if 'editor_key' not in st.session_state:
+    st.session_state.editor_key = 0
 
 # --- 1. SELECCIÓN DE MODALIDAD ---
 modalidad = st.selectbox(
@@ -139,6 +142,7 @@ with c_button:
     if st.button("Limpiar Datos", key="clear_data_btn", use_container_width=True):
         st.session_state.experimental_data = data_template_df
         st.session_state.resultados = None 
+        st.session_state.editor_key += 1 # Incrementar llave para forzar reinicio del widget
         st.rerun()
 
 with c_editor:
@@ -153,7 +157,7 @@ with c_editor:
         num_rows="dynamic",
         use_container_width=True,
         column_config=col_config,
-        key="data_input_editor" 
+        key=f"data_editor_{st.session_state.editor_key}" # Llave dinámica
     )
 
 st.session_state.experimental_data = df_edited
