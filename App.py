@@ -10,7 +10,6 @@ import inspect
 import plotly.graph_objects as go # Importamos Plotly para gráficos 3D interactivos
 
 # --- IMPORTACIÓN DE MÓDULOS ---
-# Importamos solo los dos módulos que quedan
 try:
     import modelos.un_sustrato as mod_un_sustrato
     import modelos.dos_sustratos as mod_dos_sustratos
@@ -21,28 +20,23 @@ except ImportError as e:
 def get_models_from_module(module):
     """Obtiene funciones y Clases dinámicas del módulo."""
     models = {}
-    
-    # 1. Buscar Funciones normales
     for name, func in inspect.getmembers(module, inspect.isfunction):
         if func.__module__ == module.__name__:
             display_name = name.replace("_", " ").title()
             models[display_name] = func
-            
-    # 2. Buscar Clases (Modelos dinámicos como Adair)
     for name, cls in inspect.getmembers(module, inspect.isclass):
         if cls.__module__ == module.__name__:
             display_name = name.replace("_", " ").title() + " (Dinámico)"
             models[display_name] = cls
-            
     return models
 
-# Función para generar el DataFrame inicial vacío
+# Función para generar el DataFrame inicial vacío con TIPO FLOAT explícito
 def get_empty_data_df(col_v_name, col_s1_name, col_s2_name=None, num_rows=5):
+    # Usamos np.nan en lugar de None para que Pandas reconozca la columna como numérica (float)
+    data = {col_v_name: [np.nan]*num_rows, col_s1_name: [np.nan]*num_rows}
     if col_s2_name:
-        data = {col_v_name: [None]*num_rows, col_s1_name: [None]*num_rows, col_s2_name: [None]*num_rows}
-    else:
-        data = {col_v_name: [None]*num_rows, col_s1_name: [None]*num_rows}
-    return pd.DataFrame(data)
+        data[col_s2_name] = [np.nan]*num_rows
+    return pd.DataFrame(data).astype(float)
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Ajuste de Cinética Enzimática", layout="centered")
@@ -69,14 +63,12 @@ modalidad = st.selectbox(
 
 # --- 2. DATOS ---
 st.subheader("Ingreso de Datos Experimentales")
-st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V). Los campos vacíos serán ignorados. Solo se aceptan valores numéricos.")
+st.info("💡 Tip: Copia tus datos de Excel y pégalos en la primera celda (Ctrl+V). Los campos vacíos serán ignorados.")
 
-# --- Define columns and template based on modality ---
+# --- Define columns based on modality ---
 c_names = st.columns(3 if modalidad == "Un solo sustrato" else 3) 
-# Columna de Velocidad (Ahora editable)
 with c_names[0]:
     col_v_name = st.text_input("Etiqueta Velocidad:", value="Velocidad") 
-# Columnas de Sustrato(s)
 if modalidad == "Un solo sustrato":
     with c_names[1]:
         col_s1_name = st.text_input("Etiqueta Sustrato:", value="Sustrato") 
@@ -89,10 +81,10 @@ else:
         col_s2_name = st.text_input("Etiqueta Sustrato/Inhibidor/Cofactor:", value="Variable 2") 
     cols = [col_v_name, col_s1_name, col_s2_name]
 
-# Generar el DataFrame de plantilla según la modalidad
+# Generar el DataFrame de plantilla
 data_template_df = get_empty_data_df(col_v_name, col_s1_name, col_s2_name)
 
-# --- Column Configuration to enforce number type ---
+# --- Column Configuration ---
 col_config = {
     col_v_name: st.column_config.NumberColumn(col_v_name, format="%.4f"),
     col_s1_name: st.column_config.NumberColumn(col_s1_name, format="%.4f")
@@ -121,7 +113,14 @@ if not st.session_state.experimental_data.empty:
 
     if rename_mapping:
         session_data.rename(columns=rename_mapping, inplace=True)
-        session_data = session_data.reindex(columns=cols, fill_value=None)
+    
+    # Reindexar para asegurar que tenemos las columnas correctas
+    session_data = session_data.reindex(columns=cols)
+
+    # ⚠️ CRUCIAL: Forzar conversión a numérico para evitar conflicto con NumberColumn
+    for col in cols:
+        if col in session_data.columns:
+            session_data[col] = pd.to_numeric(session_data[col], errors='coerce')
     
     if is_modal_change or len(session_data.columns) != len(cols):
         st.session_state.experimental_data = data_template_df
@@ -143,13 +142,20 @@ with c_button:
         st.rerun()
 
 with c_editor:
+    # ⚠️ Aseguramos que los datos que entran al editor sean numéricos puros
+    df_to_edit = st.session_state.experimental_data.copy()
+    for col in cols:
+        if col in df_to_edit.columns:
+             df_to_edit[col] = df_to_edit[col].astype(float)
+
     df_edited = st.data_editor(
-        st.session_state.experimental_data,
+        df_to_edit,
         num_rows="dynamic",
         use_container_width=True,
         column_config=col_config,
         key="data_input_editor" 
     )
+
 st.session_state.experimental_data = df_edited
 
 # Limpieza final
@@ -222,7 +228,6 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
         st.error("Datos insuficientes (mínimo 3 puntos).")
     else:
         try:
-            # Preparar datos X, Y
             y_data = df[col_v_name].values 
             if modalidad == "Un solo sustrato": 
                 x_data = df[col_s1_name].values
@@ -251,11 +256,10 @@ if st.button("Ejecutar ajuste de datos", type="primary"):
                 st.info("Todos los parámetros fijos.")
                 popt_full = [param_settings[p]["value"] for p in param_names]
             else:
-                # AUMENTO DE ITERACIONES AQUÍ (maxfev=500000)
                 try:
                     popt_free, _ = curve_fit(model_wrapper, x_data, y_data, p0=p0, maxfev=500000, bounds=(0, np.inf))
                 except RuntimeError as optim_err:
-                    st.error(f"⚠️ No se pudo encontrar el ajuste óptimo. El modelo es complejo. Intenta cambiar los 'Valores Iniciales' en las Opciones Avanzadas para que estén más cerca de la realidad. (Error: {optim_err})")
+                    st.error(f"⚠️ No se pudo encontrar el ajuste óptimo. (Error: {optim_err})")
                     st.stop()
                     
                 popt_full = []
