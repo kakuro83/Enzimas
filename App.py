@@ -194,6 +194,40 @@ if col_s2_name: col_names_to_save['s2_col'] = col_s2_name
 st.session_state.col_names_last[modalidad] = col_names_to_save
 st.session_state.modalidad_last = modalidad
 
+st.markdown("### Pegar datos desde celular")
+
+texto_pegado = st.text_area(
+    "Pega aquí los datos copiados desde Excel, Sheets o una tabla",
+    height=150,
+    placeholder="Ejemplo:\n0.25\t1.0\n0.48\t2.0\n0.70\t4.0"
+)
+
+if st.button("Cargar datos pegados"):
+    try:
+        from io import StringIO
+
+        texto_limpio = texto_pegado.strip().replace(",", ".")
+
+        df_paste = pd.read_csv(
+            StringIO(texto_limpio),
+            sep=r"\s+|\t|;",
+            engine="python",
+            header=None
+        )
+
+        df_paste = df_paste.iloc[:, :len(display_cols)]
+        df_paste.columns = display_cols[:df_paste.shape[1]]
+        df_paste = df_paste.reindex(columns=cols)
+        df_paste = coerce_numeric_cols(df_paste, cols)
+
+        st.session_state.experimental_data = df_paste
+        st.session_state.editor_key += 1
+        st.success("Datos cargados correctamente.")
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"No se pudieron cargar los datos pegados: {e}")
+        
 c_editor, c_button = st.columns([5, 1])
 with c_button:
     if st.button("Limpiar Datos", key="clear_data_btn", use_container_width=True):
